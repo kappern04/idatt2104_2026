@@ -1,1 +1,12 @@
 /target
+**/*.rs.bk
+
+# Local op-log produced by demo runs
+operations.log
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
