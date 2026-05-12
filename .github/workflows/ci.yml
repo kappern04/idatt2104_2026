@@ -50,6 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     # Always run for the report, even if `test` already failed somewhere.
     if: ${{ !cancelled() }}
+    # Mirror the secret into an env var so step-level `if:` can gate on it —
+    # `secrets.*` cannot be referenced directly inside step-level conditionals.
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -68,14 +72,19 @@ jobs:
         run: cargo nextest run --workspace --profile ci --no-fail-fast || true
 
       - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
+        # Skip silently when the token isn't configured (e.g. PRs from forks)
+        # or when nextest didn't produce a report (e.g. compile failure).
+        if: >-
+          ${{ !cancelled()
+              && env.CODECOV_TOKEN != ''
+              && hashFiles('target/nextest/ci/junit.xml') != '' }}
         uses: codecov/test-results-action@v1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           files: target/nextest/ci/junit.xml
 
       - name: Upload JUnit artefact
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('target/nextest/ci/junit.xml') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: junit-xml
@@ -90,6 +99,8 @@ jobs:
       CARGO_INCREMENTAL: "0"
       RUSTFLAGS: "-Cinstrument-coverage"
       LLVM_PROFILE_FILE: "rustcrdt-%p-%m.profraw"
+      # Mirrored from secrets so step-level `if:` can gate on its presence.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
