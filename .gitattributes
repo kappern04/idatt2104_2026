@@ -1,0 +1,35 @@
+# Normalise line endings across platforms.
+# Without this, Windows checkouts can store CRLF in source files and `rustfmt`
+# on Ubuntu CI will flag every line as changed.
+
+# Default: let Git decide for text files (will be LF on commit, native on checkout if core.autocrlf is set).
+*           text=auto
+
+# Rust + config files must stay LF everywhere — this is what `rustfmt` produces.
+*.rs        text eol=lf
+*.toml      text eol=lf
+*.lock      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.html      text eol=lf
+*.css       text eol=lf
+*.js        text eol=lf
+
+# Shell scripts: LF (executed on Linux runners).
+*.sh        text eol=lf
+
+# Windows-specific: CRLF.
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Binary files — never touch.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.profraw   binary
+
