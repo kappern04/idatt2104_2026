@@ -277,9 +277,7 @@ cargo doc --workspace --no-deps --open
 
 Design notes live alongside the code in `docs/`:
 
-- [`docs/Detailed plan.md`](docs/Detailed plan.md) — the original project plan.
-- [`docs/ci-coverage-decision.md`](docs/ci-coverage-decision.md) — ADR for the
-  CI coverage-tool choice (`grcov` vs `cargo-tarpaulin`).
+- [`docs/Detailed plan.md`](docs/Detailed%20plan.md) — the original project plan.
 
 ## External information / references
 
