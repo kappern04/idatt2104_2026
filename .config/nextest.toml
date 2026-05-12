@@ -6,7 +6,8 @@
 # JUnit-format test report consumed by Codecov Test Analytics.
 
 [profile.default]
-# Local default — fail fast, retry once on flake.
+# Local default — never fail-fast (always run every test for a full picture),
+# no retries (flakes should be visible, not papered over).
 retries = 0
 fail-fast = false
 

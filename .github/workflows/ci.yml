@@ -133,9 +133,15 @@ jobs:
             --output-path coverage/html
 
       - name: Upload coverage to Codecov
+        # Skip silently when the token isn't configured (e.g. PRs from forks)
+        # or when grcov didn't produce an lcov file. fail_ci_if_error stays
+        # false so a transient Codecov outage doesn't turn the build red.
+        if: >-
+          ${{ env.CODECOV_TOKEN != ''
+              && hashFiles('coverage/lcov.info') != '' }}
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           files: coverage/lcov.info
           flags: rust
           fail_ci_if_error: false
