@@ -25,7 +25,10 @@ pub struct OrSet<T: Eq + Hash + Clone> {
 
 impl<T: Eq + Hash + Clone> OrSet<T> {
     pub fn new() -> Self {
-        Self { adds: HashMap::new(), removes: HashMap::new() }
+        Self {
+            adds: HashMap::new(),
+            removes: HashMap::new(),
+        }
     }
 
     pub fn add(&mut self, element: T) -> Uuid {
@@ -37,7 +40,10 @@ impl<T: Eq + Hash + Clone> OrSet<T> {
     /// Remove every currently-observed tag for `element` (tombstone them).
     pub fn remove(&mut self, element: &T) {
         if let Some(tags) = self.adds.get(element).cloned() {
-            self.removes.entry(element.clone()).or_default().extend(tags);
+            self.removes
+                .entry(element.clone())
+                .or_default()
+                .extend(tags);
         }
     }
 
@@ -53,11 +59,16 @@ impl<T: Eq + Hash + Clone> OrSet<T> {
 
     pub fn merge(&mut self, other: &Self) {
         for (k, tags) in &other.adds {
-            self.adds.entry(k.clone()).or_default().extend(tags.iter().copied());
+            self.adds
+                .entry(k.clone())
+                .or_default()
+                .extend(tags.iter().copied());
         }
         for (k, tags) in &other.removes {
-            self.removes.entry(k.clone()).or_default().extend(tags.iter().copied());
+            self.removes
+                .entry(k.clone())
+                .or_default()
+                .extend(tags.iter().copied());
         }
     }
 }
-

@@ -5,4 +5,3 @@
 //! ops over the network, so persistence is "free" once apply is idempotent.
 
 pub mod persistence;
-
