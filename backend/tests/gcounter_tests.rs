@@ -7,7 +7,9 @@ use rustcrdt::crdt::gcounter::GCounter;
 
 fn counter(slots: &[(u64, u64)]) -> GCounter {
     let mut g = GCounter::new();
-    for &(p, v) in slots { g.increment(p, v); }
+    for &(p, v) in slots {
+        g.increment(p, v);
+    }
     g
 }
 
@@ -55,4 +57,3 @@ fn value_is_sum_of_slots() {
     let g = counter(&[(1, 3), (2, 5), (3, 2)]);
     assert_eq!(g.value(), 10);
 }
-

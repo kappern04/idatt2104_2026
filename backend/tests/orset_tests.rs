@@ -37,4 +37,3 @@ fn merge_is_idempotent() {
     assert_eq!(a.contains(&"a"), snapshot.contains(&"a"));
     assert_eq!(a.contains(&"b"), snapshot.contains(&"b"));
 }
-

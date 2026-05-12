@@ -4,7 +4,7 @@ members = ["backend"]
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.85"
 license = "MIT"
 authors = ["IDATT2104 2026 group"]
 
