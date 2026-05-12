@@ -17,7 +17,9 @@ pub struct GCounter {
 }
 
 impl GCounter {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Increment this peer's slot. Only the owning peer should call this.
     pub fn increment(&mut self, peer: PeerId, by: u64) {
@@ -25,14 +27,17 @@ impl GCounter {
     }
 
     /// Total value across all replicas observed so far.
-    pub fn value(&self) -> u64 { self.counts.values().sum() }
+    pub fn value(&self) -> u64 {
+        self.counts.values().sum()
+    }
 
     /// Element-wise max merge. Commutative, associative, idempotent.
     pub fn merge(&mut self, other: &GCounter) {
         for (peer, &v) in &other.counts {
             let slot = self.counts.entry(*peer).or_insert(0);
-            if v > *slot { *slot = v; }
+            if v > *slot {
+                *slot = v;
+            }
         }
     }
 }
-

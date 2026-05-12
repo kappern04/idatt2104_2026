@@ -54,4 +54,3 @@ async fn main() -> anyhow::Result<()> {
     println!("rustcrdt-node skeleton — replace with real wiring (see TODOs in main.rs).");
     Ok(())
 }
-

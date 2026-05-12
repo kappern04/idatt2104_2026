@@ -16,4 +16,3 @@ pub enum Message {
     /// Bulk catch-up: a vector of ops a reconnecting peer asks for.
     Sync { from: PeerId, ops: Vec<Op> },
 }
-

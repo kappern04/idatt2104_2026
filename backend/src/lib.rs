@@ -20,4 +20,3 @@ pub mod ui;
 /// Using a `u64` keeps wire messages compact; in a real system a UUID would be safer
 /// (collision-free without coordination). Documented as a known limitation.
 pub type PeerId = u64;
-
