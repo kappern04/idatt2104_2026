@@ -114,7 +114,8 @@ hand-written for this assignment.
 
 ## Installation
 
-Requires Rust 1.75+ (install via [rustup](https://rustup.rs)).
+Requires Rust 1.85+ (install via [rustup](https://rustup.rs)). The exact
+MSRV is verified in CI; see the `msrv` job in `.github/workflows/ci.yml`.
 
 ```pwsh
 git clone <repo-url>
