@@ -45,6 +45,42 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --all-targets
 
+  test-analytics:
+    name: test analytics (nextest + Codecov)
+    runs-on: ubuntu-latest
+    # Always run for the report, even if `test` already failed somewhere.
+    if: ${{ !cancelled() }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: nextest
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests with nextest (JUnit output)
+        # `--no-fail-fast` so a failing test still produces a complete report.
+        # Don't fail the job here — Codecov needs the XML even on red builds.
+        run: cargo nextest run --workspace --profile ci --no-fail-fast || true
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/nextest/ci/junit.xml
+
+      - name: Upload JUnit artefact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-xml
+          path: target/nextest/ci/junit.xml
+
   coverage:
     name: coverage (grcov)
     needs: test

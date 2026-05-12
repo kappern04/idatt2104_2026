@@ -196,7 +196,10 @@ CI runs on every push and pull request via GitHub Actions
 1. **`rustfmt`** — formatting gate.
 2. **`clippy`** — `-D warnings`, fails on any lint.
 3. **`test`** — `cargo test --workspace` on Ubuntu *and* Windows.
-4. **`coverage`** — instrumented build + `grcov` aggregation, with line *and*
+4. **`test-analytics`** — `cargo nextest` run on Ubuntu that emits a JUnit XML
+   report; uploaded to **Codecov Test Analytics** so flaky/slow tests surface
+   in PR comments.
+5. **`coverage`** — instrumented build + `grcov` aggregation, with line *and*
    branch coverage uploaded to Codecov and stored as a build artefact.
 
 The choice between `cargo-tarpaulin` and `grcov` is documented as an ADR in
