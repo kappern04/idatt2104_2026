@@ -97,9 +97,10 @@ jobs:
 
   deploy-docs:
     name: deploy rustdoc to Pages
-    # Run after binaries are built so Pages is only updated when a release is
-    # actually viable. On workflow_dispatch with no tag, `verify-tag` is
-    # skipped, `build-binaries` still runs, and docs deploy normally.
+    # Run after binaries are built so Pages is only updated when a build is
+    # actually viable. On workflow_dispatch with no tag, `build-binaries`
+    # still runs, `publish-release` is skipped by its tag-only `if:`, and
+    # docs deploy normally.
     needs: build-binaries
     runs-on: ubuntu-latest
     environment:
