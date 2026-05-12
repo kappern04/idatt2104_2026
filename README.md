@@ -207,12 +207,11 @@ CI runs on every push and pull request via GitHub Actions
 5. **`coverage`** — instrumented build + `grcov` aggregation, with line *and*
    branch coverage uploaded to Codecov and stored as a build artefact.
 
-The choice between `cargo-tarpaulin` and `grcov` is documented as an ADR in
-[`docs/ci-coverage-decision.md`](docs/ci-coverage-decision.md). Short version:
-`grcov` wins because we need branch coverage on heavily-branching CRDT merge
-code, the project is async/Tokio-heavy (where ptrace-based tools struggle),
-and `grcov` works identically on the Windows dev machine and the Linux CI
-runner.
+The choice between `cargo-tarpaulin` and `grcov` is summarized here. Short
+version: `grcov` wins because we need branch coverage on heavily-branching
+CRDT merge code, the project is async/Tokio-heavy (where ptrace-based tools
+struggle), and `grcov` works identically on the Windows dev machine and the
+Linux CI runner.
 
 ## Continuous delivery
 
