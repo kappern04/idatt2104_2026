@@ -1,0 +1,27 @@
+# cargo-nextest configuration.
+#
+# Docs: https://nexte.st/book/configuration.html
+#
+# The `ci` profile is used by `.github/workflows/ci.yml` to produce a
+# JUnit-format test report consumed by Codecov Test Analytics.
+
+[profile.default]
+# Local default — never fail-fast (always run every test for a full picture),
+# no retries (flakes should be visible, not papered over).
+retries = 0
+fail-fast = false
+
+[profile.ci]
+# CI default — never fail-fast; we always want the full report.
+fail-fast = false
+retries = 0
+# Slightly tighter slow-test budget so we notice runaway tests.
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[profile.ci.junit]
+# Produces target/nextest/ci/junit.xml.
+path = "junit.xml"
+# Also store stdout/stderr inline so failures are inspectable in Codecov.
+store-success-output = false
+store-failure-output = true
+

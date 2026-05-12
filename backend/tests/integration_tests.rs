@@ -11,4 +11,3 @@
 fn three_peers_converge_after_concurrent_edits() {
     // TODO(week 2): implement once network::peer is in place.
 }
-

@@ -11,4 +11,3 @@ fn empty_doc_renders_as_empty_string() {
     let r = Rga::new();
     assert_eq!(r.text(), "");
 }
-

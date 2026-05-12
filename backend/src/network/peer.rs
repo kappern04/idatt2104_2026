@@ -12,4 +12,3 @@
 //!   ops — this is the offline-support story.
 
 // TODO(week 2): implement Peer::new, listen, connect, broadcast, apply.
-

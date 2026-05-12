@@ -1,0 +1,130 @@
+name: Release
+
+# Continuous Delivery — runs only when a version tag is pushed (e.g. `v0.1.0`)
+# or manually from the Actions tab. Produces:
+#   1. cross-platform `rustcrdt-node` binaries attached to a GitHub Release
+#   2. rustdoc HTML published to GitHub Pages
+#
+# Why tag-driven and not per-commit?
+#   Building and signing release artefacts for 3 OSes on every push wastes CI
+#   minutes and pollutes the Releases tab. Tags are the conventional signal
+#   that "this commit is a deployable version".
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create the GitHub Release
+  pages: write      # needed to deploy rustdoc to Pages
+  id-token: write   # required by the Pages deploy action
+
+jobs:
+  build-binaries:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --bin rustcrdt-node --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/rustcrdt-node dist/
+          cp README.md dist/
+          [ -f LICENSE ] && cp LICENSE dist/ || true
+          tar -czf rustcrdt-node-${{ matrix.target }}.tar.gz -C dist .
+
+      - name: Package (windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/rustcrdt-node.exe dist/
+          Copy-Item README.md dist/
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist/ }
+          Compress-Archive -Path dist/* -DestinationPath rustcrdt-node-${{ matrix.target }}.zip
+
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustcrdt-node-${{ matrix.target }}
+          path: rustcrdt-node-${{ matrix.target }}.*
+
+  publish-release:
+    name: publish GitHub Release
+    needs: build-binaries
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artefacts/*
+          generate_release_notes: true
+
+  deploy-docs:
+    name: deploy rustdoc to Pages
+    # Run after binaries are built so Pages is only updated when a build is
+    # actually viable. On workflow_dispatch with no tag, `build-binaries`
+    # still runs, `publish-release` is skipped by its tag-only `if:`, and
+    # docs deploy normally.
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build rustdoc
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+      - name: Add index redirect to crate
+        run: echo '<meta http-equiv="refresh" content="0; url=rustcrdt/index.html">' > target/doc/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+

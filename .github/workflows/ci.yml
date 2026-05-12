@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  msrv:
+    name: msrv (Rust 1.85)
+    runs-on: ubuntu-latest
+    # Pinned to the rust-version field in Cargo.toml. If you bump the MSRV
+    # there, bump it here too — both numbers must stay in sync, and this job
+    # exists to catch the drift.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+      - name: Verify the workspace builds on the declared MSRV
+        run: cargo check --workspace --all-targets --locked
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test
+        run: cargo test --workspace --all-targets
+
+  test-analytics:
+    name: test analytics (nextest + Codecov)
+    runs-on: ubuntu-latest
+    # Always run for the report, even if `test` already failed somewhere.
+    if: ${{ !cancelled() }}
+    # Mirror the secret into an env var so step-level `if:` can gate on it —
+    # `secrets.*` cannot be referenced directly inside step-level conditionals.
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: nextest
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests with nextest (JUnit output)
+        # `--no-fail-fast` so a failing test still produces a complete report.
+        # Don't fail the job here — Codecov needs the XML even on red builds.
+        run: cargo nextest run --workspace --profile ci --no-fail-fast || true
+
+      - name: Upload test results to Codecov
+        # Skip silently when the token isn't configured (e.g. PRs from forks)
+        # or when nextest didn't produce a report (e.g. compile failure).
+        if: >-
+          ${{ !cancelled()
+              && env.CODECOV_TOKEN != ''
+              && hashFiles('target/nextest/ci/junit.xml') != '' }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: target/nextest/ci/junit.xml
+
+      - name: Upload JUnit artefact
+        if: ${{ !cancelled() && hashFiles('target/nextest/ci/junit.xml') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-xml
+          path: target/nextest/ci/junit.xml
+
+  coverage:
+    name: coverage (grcov)
+    needs: test
+    runs-on: ubuntu-latest
+    # Source-based coverage requires fresh, non-incremental builds.
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-Cinstrument-coverage"
+      LLVM_PROFILE_FILE: "rustcrdt-%p-%m.profraw"
+      # Mirrored from secrets so step-level `if:` can gate on its presence.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain with llvm-tools-preview
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
+
+      - name: Install grcov
+        run: cargo install grcov --locked
+
+      - name: Run tests with coverage instrumentation
+        run: cargo test --workspace
+
+      - name: Aggregate coverage with grcov
+        run: |
+          mkdir -p coverage/html
+
+          grcov . \
+            --binary-path ./target/debug/deps/ \
+            --source-dir . \
+            --output-type lcov \
+            --branch \
+            --ignore-not-existing \
+            --ignore 'target/*' \
+            --ignore '/*' \
+            --output-path coverage/lcov.info
+
+          grcov . \
+            --binary-path ./target/debug/deps/ \
+            --source-dir . \
+            --output-type html \
+            --branch \
+            --ignore-not-existing \
+            --ignore 'target/*' \
+            --ignore '/*' \
+            --output-path coverage/html
+
+      - name: Upload coverage to Codecov
+        # Run whenever grcov produced an lcov file. We deliberately do NOT
+        # gate on the token: public-repo tokenless uploads work via the
+        # Codecov GitHub App, so requiring CODECOV_TOKEN would block them.
+        # `fail_ci_if_error: false` keeps the job green if the upload itself
+        # fails (e.g. fork PR with neither token nor OIDC).
+        if: ${{ hashFiles('coverage/lcov.info') != '' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: coverage/lcov.info
+          flags: rust
+          fail_ci_if_error: false
+
+      - name: Upload coverage artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+

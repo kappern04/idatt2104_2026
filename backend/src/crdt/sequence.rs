@@ -40,11 +40,17 @@ pub struct Rga {
 }
 
 impl Rga {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Visible text (deleted entries skipped).
     pub fn text(&self) -> String {
-        self.chars.iter().filter(|c| !c.deleted).map(|c| c.value).collect()
+        self.chars
+            .iter()
+            .filter(|c| !c.deleted)
+            .map(|c| c.value)
+            .collect()
     }
 
     /// Apply a remote or local op. Safe to call multiple times with the same op.
@@ -54,4 +60,3 @@ impl Rga {
         todo!("RGA::apply — phase 3 milestone");
     }
 }
-

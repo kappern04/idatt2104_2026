@@ -1,0 +1,43 @@
+# Codecov configuration.
+#
+# Docs: https://docs.codecov.com/docs/codecov-yaml
+#
+# We keep this deliberately minimal: target ~70% project coverage (academic
+# project, partial implementation expected), allow small dips on PRs, and
+# ignore non-source paths so the percentage isn't diluted by tests, scaffolding
+# files and target/.
+
+codecov:
+  require_ci_to_pass: true
+  notify:
+    wait_for_ci: true
+
+coverage:
+  precision: 1
+  round: down
+  range: "60...90"           # red below 60, green at 90
+  status:
+    project:
+      default:
+        target: 70%          # absolute coverage gate
+        threshold: 2%        # PRs may drop coverage by up to 2% without failing
+        informational: true  # report only, don't block PRs while project is WIP
+    patch:
+      default:
+        target: 80%          # new code in a PR should be reasonably tested
+        threshold: 5%
+        informational: true
+
+comment:
+  layout: "header, diff, files, footer"
+  behavior: default
+  require_changes: false     # always post the PR comment so reviewers see it
+
+# Files we don't want counted toward coverage at all.
+ignore:
+  - "target/**"
+  - "backend/tests/**"        # integration tests themselves
+  - "frontend/**"             # JS, not measured
+  - "docs/**"
+  - "**/*.md"
+
