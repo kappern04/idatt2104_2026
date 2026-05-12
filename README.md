@@ -160,15 +160,20 @@ cargo test --workspace
 
 This runs:
 
-- **Unit tests** in each `crdt/*.rs` module.
-- **Property tests** in `backend/tests/{gcounter,orset,sequence}_tests.rs`
-  verifying the three CRDT axioms (commutativity, associativity, idempotency).
-- **Integration tests** in `backend/tests/integration_tests.rs` that simulate
-  multiple peers and concurrent edits.
+- **G-Counter property tests** (`backend/tests/gcounter_tests.rs`) —
+  commutativity, associativity, idempotency, plus a sanity check that
+  `value()` equals the sum of all slots.
+- **OR-Set tests** (`backend/tests/orset_tests.rs`) — basic add/contains, the
+  concurrent-add-wins-over-remove scenario, and merge idempotency. Full
+  commutativity / associativity coverage is **planned** alongside the next
+  CRDT iteration.
+- **Sequence (RGA) test stub** (`backend/tests/sequence_tests.rs`) — currently
+  `#[ignore]`-d; will be enabled once `Rga::apply` is implemented in phase 3.
+- **Multi-peer integration test stub** (`backend/tests/integration_tests.rs`)
+  — currently `#[ignore]`-d; will be filled in once the networking layer
+  lands in phase 2.
 
-Integration tests that depend on the networking layer are currently
-`#[ignore]`-d and will be enabled in week 2 — run all tests including ignored
-ones with:
+Run everything including the ignored stubs with:
 
 ```pwsh
 cargo test --workspace -- --include-ignored
@@ -235,7 +240,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-To reproduce the coverage report locally:
+To reproduce the coverage report locally (matches the CI invocation):
 
 ```pwsh
 $env:RUSTFLAGS = "-Cinstrument-coverage"
@@ -244,9 +249,13 @@ rustup component add llvm-tools-preview
 cargo install grcov --locked
 cargo test --workspace
 grcov . --binary-path ./target/debug/deps/ -s . -t html --branch `
-  --ignore-not-existing --ignore 'target/*' -o coverage
+  --ignore-not-existing --ignore 'target/*' --ignore '/*' -o coverage
 start coverage/index.html
 ```
+
+The `--ignore '/*'` pattern filters out absolute paths (rustc-installed
+stdlib and registry crates that occasionally leak into source-based coverage
+reports) so the percentage reflects this workspace only.
 
 ## Future work / known limitations
 

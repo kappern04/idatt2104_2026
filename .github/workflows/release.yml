@@ -58,7 +58,8 @@ jobs:
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/rustcrdt-node dist/
-          cp README.md LICENSE 2>/dev/null || true
+          cp README.md dist/
+          [ -f LICENSE ] && cp LICENSE dist/ || true
           tar -czf rustcrdt-node-${{ matrix.target }}.tar.gz -C dist .
 
       - name: Package (windows)
@@ -67,7 +68,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item target/${{ matrix.target }}/release/rustcrdt-node.exe dist/
-          Copy-Item README.md dist/ -ErrorAction SilentlyContinue
+          Copy-Item README.md dist/
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist/ }
           Compress-Archive -Path dist/* -DestinationPath rustcrdt-node-${{ matrix.target }}.zip
 
       - name: Upload artefact
