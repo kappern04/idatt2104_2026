@@ -159,12 +159,12 @@ jobs:
             --output-path coverage/html
 
       - name: Upload coverage to Codecov
-        # Skip silently when the token isn't configured (e.g. PRs from forks)
-        # or when grcov didn't produce an lcov file. fail_ci_if_error stays
-        # false so a transient Codecov outage doesn't turn the build red.
-        if: >-
-          ${{ env.CODECOV_TOKEN != ''
-              && hashFiles('coverage/lcov.info') != '' }}
+        # Run whenever grcov produced an lcov file. We deliberately do NOT
+        # gate on the token: public-repo tokenless uploads work via the
+        # Codecov GitHub App, so requiring CODECOV_TOKEN would block them.
+        # `fail_ci_if_error: false` keeps the job green if the upload itself
+        # fails (e.g. fork PR with neither token nor OIDC).
+        if: ${{ hashFiles('coverage/lcov.info') != '' }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ env.CODECOV_TOKEN }}
