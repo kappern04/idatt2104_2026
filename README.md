@@ -174,6 +174,20 @@ ones with:
 cargo test --workspace -- --include-ignored
 ```
 
+## Branching model
+
+The repo uses a lightweight GitFlow:
+
+| Branch | Purpose |
+|---|---|
+| `main` | Release-ready code. Only updated via PR from `dev`. Tagged for releases. |
+| `dev`  | Integration branch. All feature branches merge here via PR. |
+| `<n>-<topic>` | Short-lived feature branches (e.g. `3-cicd`, `4-rga-apply`). |
+
+**CI runs on every push and PR to both `main` and `dev`.** **CD (release
+binaries + Pages deploy) runs only on tag pushes from `main`** — i.e. after a
+`dev → main` PR is merged and a `vX.Y.Z` tag is pushed.
+
 ## Continuous integration & code coverage
 
 CI runs on every push and pull request via GitHub Actions
