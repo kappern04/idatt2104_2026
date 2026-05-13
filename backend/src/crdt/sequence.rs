@@ -54,9 +54,40 @@ impl Rga {
     }
 
     /// Apply a remote or local op. Safe to call multiple times with the same op.
-    pub fn apply(&mut self, _op: &Op) {
-        // TODO: implement insert-after with tie-breaking on (peer_id, counter)
-        // and delete-as-tombstone. Idempotency: if the id already exists, skip.
-        todo!("RGA::apply — phase 3 milestone");
+    pub fn apply(&mut self, op: &Op) {
+        match op {
+            Op::Insert { after, ch } => {
+                // Idempotency: skip duplicate ids.
+                if self.chars.iter().any(|c| c.id == ch.id) {
+                    return;
+                }
+
+                let start = match after {
+                    None => 0,
+                    Some(anchor) => match self.chars.iter().position(|c| c.id == *anchor) {
+                        Some(i) => i + 1,
+                        // Anchor not yet delivered; skip — replayed from op-log on reconnect.
+                        None => return,
+                    },
+                };
+
+                // Walk forward past concurrent inserts with a higher id (descending order).
+                // This deterministic tie-break ensures all replicas reach the same position
+                // regardless of delivery order.
+                let mut pos = start;
+                while pos < self.chars.len() && self.chars[pos].id > ch.id {
+                    pos += 1;
+                }
+
+                self.chars.insert(pos, ch.clone());
+            }
+
+            Op::Delete { target } => {
+                // Tombstone. Idempotent: already-deleted chars are unchanged.
+                if let Some(c) = self.chars.iter_mut().find(|c| c.id == *target) {
+                    c.deleted = true;
+                }
+            }
+        }
     }
 }
