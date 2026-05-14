@@ -95,23 +95,29 @@ editor.addEventListener("keydown", (e) => {
 
 editor.addEventListener("input", () => {
   const next = editor.value;
-  if (next.length === prev.length + 1) {
-    for (let i = 0; i < next.length; i++) {
-      if (i >= prev.length || next[i] !== prev[i]) {
-        send({ type: "local_insert", offset: i, ch: next[i] });
-        break;
-      }
+  const delta = next.length - prev.length;
+
+  if (delta > 0) {
+    // One or more characters inserted (single keystroke, paste, autocomplete).
+    // Find where the new chars start (first mismatch from the left).
+    let start = 0;
+    while (start < prev.length && next[start] === prev[start]) start++;
+    for (let i = 0; i < delta; i++) {
+      send({ type: "local_insert", offset: start + i, ch: next[start + i] });
     }
-  } else if (next.length === prev.length - 1) {
-    // Prefer the cursor-captured offset; fall back to string diff.
-    let offset = pendingDeleteOffset;
-    if (offset === null || offset < 0) {
-      for (let i = 0; i < prev.length; i++) {
-        if (i >= next.length || prev[i] !== next[i]) { offset = i; break; }
-      }
+  } else if (delta < 0) {
+    // One or more characters deleted (backspace, select-all+delete, etc.).
+    const deleteCount = -delta;
+    let offset = (deleteCount === 1 && pendingDeleteOffset !== null && pendingDeleteOffset >= 0)
+      ? pendingDeleteOffset
+      : (() => { for (let i = 0; i < prev.length; i++) { if (i >= next.length || prev[i] !== next[i]) return i; } return 0; })();
+    for (let i = 0; i < deleteCount; i++) {
+      // Each delete removes the char at `offset`; remaining chars shift left.
+      send({ type: "local_delete", offset });
     }
-    if (offset !== null) send({ type: "local_delete", offset });
     pendingDeleteOffset = null;
   }
+  // delta === 0: autocorrect replaced same-length text — too ambiguous to handle safely.
+
   prev = next;
 });
