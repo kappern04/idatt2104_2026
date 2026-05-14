@@ -116,6 +116,13 @@ impl Peer {
     /// Delete the visible character at `visible_offset`.
     pub async fn browser_delete(&self, visible_offset: usize) -> Result<()> {
         let target = self.doc.lock().await.id_at_visible(visible_offset);
+        tracing::debug!(
+            op_type = "delete",
+            pos = visible_offset,
+            target_peer = target.map(|id| id.peer_id),
+            target_counter = target.map(|id| id.counter),
+            "ws_intent_resolved",
+        );
         if let Some(target) = target {
             self.local_op(Op::Delete { target }).await?;
         }
@@ -191,14 +198,16 @@ impl Peer {
     /// Does NOT re-broadcast — callers are responsible for fan-out topology.
     pub async fn remote_op(&self, msg: Message) {
         match msg {
-            Message::Op { op, .. } => {
+            Message::Op { ref op, from, seq } => {
+                tracing::debug!(from, seq, ?op, "remote_op_received");
                 let text = {
                     let mut doc = self.doc.lock().await;
-                    doc.apply(&op);
+                    doc.apply(op);
                     doc.text()
                 };
+                tracing::debug!(text_len = text.len(), "remote_op_applied");
                 if let Some(log) = self.log.lock().await.as_mut() {
-                    if let Err(e) = log.append(&op).await {
+                    if let Err(e) = log.append(op).await {
                         warn!("op-log write failed: {e}");
                     }
                 }
