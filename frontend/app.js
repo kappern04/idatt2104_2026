@@ -11,6 +11,15 @@ const editor = $("editor");
 const logEl = $("log");
 const stateEl = $("state");
 
+// Auto-fill WS URL from the hostname the page was served from so a phone on
+// the same LAN connects to the right node without manual editing.
+{
+  const host = location.hostname === "127.0.0.1" || location.hostname === "localhost"
+    ? "127.0.0.1"
+    : location.hostname;
+  $("ws-url").value = `ws://${host}:8001`;
+}
+
 let ws = null;
 
 function setState(connected) {
