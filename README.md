@@ -84,9 +84,9 @@ the wire protocol defined in `backend/src/network/protocol.rs`.
 - ✅ RGA sequence CRDT — insert-after with tombstone deletes, concurrent-insert tie-breaking, full property tests (commutativity, associativity, idempotency)
 - ✅ Async TCP peer transport with exponential-backoff reconnection (`backend/src/network/peer.rs`)
 - ✅ Multi-peer convergence tests — in-process simulation of concurrent edits, duplicate delivery, and offline-then-sync (`backend/tests/integration_tests.rs`)
-- ⏳ JSON-Lines persistence + replay on startup
-- ⏳ WebSocket bridge to the browser frontend
-- ⏳ CLI demo loop
+- ✅ JSON-Lines op-log persistence — append-on-write, idempotent replay on startup (`backend/src/storage/persistence.rs`)
+- ✅ WebSocket bridge to browser frontend — pushes `State { text }` after every op; accepts `local_insert`/`local_delete` intents (`backend/src/ui/ws.rs`)
+- ✅ CLI demo loop — `insert`, `delete`, `text`, `peers`, `quit` over stdin (`backend/src/ui/cli.rs`)
 
 ## Roadmap (deadline 26 May)
 

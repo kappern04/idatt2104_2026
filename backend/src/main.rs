@@ -6,7 +6,7 @@
 use clap::Parser;
 use rustcrdt::network::peer::Peer;
 use rustcrdt::storage::persistence::OpLog;
-use rustcrdt::ui::ws;
+use rustcrdt::ui::{cli, ws};
 
 #[derive(Parser, Debug)]
 #[command(name = "rustcrdt-node", about = "Peer-to-peer CRDT editor node")]
@@ -91,14 +91,19 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // TODO(issue #9): run stdin CLI.
-
     println!(
-        "Node {peer_id} listening on :{}.  Press Ctrl-C to stop.",
-        cli.port
+        "Node {peer_id} on :{} (UI :{}).  Commands: insert | delete | text | peers | quit",
+        cli.port, cli.ui_port
     );
 
-    tokio::signal::ctrl_c().await?;
+    // Run the CLI loop; also exit on Ctrl-C.
+    tokio::select! {
+        res = cli::run(peer.clone()) => {
+            if let Err(e) = res { tracing::error!("CLI error: {e}"); }
+        }
+        _ = tokio::signal::ctrl_c() => {}
+    }
+
     tracing::info!("shutting down");
     Ok(())
 }
