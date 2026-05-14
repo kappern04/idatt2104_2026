@@ -1,6 +1,24 @@
 //! OR-Set CRDT property tests.
 
+use proptest::prelude::*;
 use rustcrdt::crdt::orset::OrSet;
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+/// Build an `OrSet<u8>` by replaying a sequence of (add?, value) operations.
+fn build(ops: &[(bool, u8)]) -> OrSet<u8> {
+    let mut s = OrSet::new();
+    for &(is_add, val) in ops {
+        if is_add {
+            s.add(val);
+        } else {
+            s.remove(&val);
+        }
+    }
+    s
+}
+
+// ── targeted unit tests ───────────────────────────────────────────────────────
 
 #[test]
 fn add_then_contains() {
@@ -36,4 +54,65 @@ fn merge_is_idempotent() {
     a.merge(&snapshot);
     assert_eq!(a.contains(&"a"), snapshot.contains(&"a"));
     assert_eq!(a.contains(&"b"), snapshot.contains(&"b"));
+}
+
+// ── property tests ────────────────────────────────────────────────────────────
+
+proptest! {
+    /// merge(A, B) == merge(B, A)
+    ///
+    /// `OrSet::merge` is a per-element union of UUID tag sets, so the result
+    /// is the same regardless of which side is merged into which.
+    #[test]
+    fn prop_merge_is_commutative(
+        ops_a in prop::collection::vec((any::<bool>(), any::<u8>()), 0..=5),
+        ops_b in prop::collection::vec((any::<bool>(), any::<u8>()), 0..=5),
+    ) {
+        let a = build(&ops_a);
+        let b = build(&ops_b);
+
+        let mut ab = a.clone();
+        ab.merge(&b);
+
+        let mut ba = b.clone();
+        ba.merge(&a);
+
+        prop_assert_eq!(ab, ba);
+    }
+
+    /// merge(A, merge(B, C)) == merge(merge(A, B), C)
+    #[test]
+    fn prop_merge_is_associative(
+        ops_a in prop::collection::vec((any::<bool>(), any::<u8>()), 0..=5),
+        ops_b in prop::collection::vec((any::<bool>(), any::<u8>()), 0..=5),
+        ops_c in prop::collection::vec((any::<bool>(), any::<u8>()), 0..=5),
+    ) {
+        let a = build(&ops_a);
+        let b = build(&ops_b);
+        let c = build(&ops_c);
+
+        // merge(A, merge(B, C))
+        let mut bc = b.clone();
+        bc.merge(&c);
+        let mut left = a.clone();
+        left.merge(&bc);
+
+        // merge(merge(A, B), C)
+        let mut ab = a.clone();
+        ab.merge(&b);
+        ab.merge(&c);
+
+        prop_assert_eq!(left, ab);
+    }
+
+    /// merge(A, A) == A
+    #[test]
+    fn prop_merge_is_idempotent(
+        ops in prop::collection::vec((any::<bool>(), any::<u8>()), 0..=5),
+    ) {
+        let a = build(&ops);
+        let mut merged = a.clone();
+        merged.merge(&a);
+        prop_assert_eq!(merged, a);
+    }
 }
