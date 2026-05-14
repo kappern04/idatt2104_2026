@@ -47,6 +47,25 @@ impl OpLog {
         Ok(())
     }
 
+    /// Truncate the log to zero bytes.
+    ///
+    /// Call this on clean shutdown so the next session starts with an empty
+    /// document instead of replaying the current session's ops. The file is
+    /// kept (not deleted) so `OpLog::load` on the next startup returns an
+    /// empty `Vec` rather than treating a missing file as a fresh start.
+    pub async fn clear(&mut self) -> Result<()> {
+        // Reopen with truncate rather than calling set_len — more reliable on
+        // Windows where set_len on an append-mode handle can be restricted.
+        self.file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.path)
+            .await
+            .with_context(|| format!("clearing op-log {:?}", self.path))?;
+        Ok(())
+    }
+
     /// Read every op from `path` in order.
     ///
     /// - Returns an empty `Vec` if the file does not exist (fresh node).
@@ -192,6 +211,24 @@ mod tests {
         // Create an empty file.
         OpLog::open(&path).await.unwrap();
 
+        let ops = OpLog::load(&path).await.unwrap();
+        assert!(ops.is_empty());
+
+        tokio::fs::remove_file(&path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn clear_empties_the_log() {
+        let path = test_path("clear");
+        let _ = tokio::fs::remove_file(&path).await;
+
+        let mut log = OpLog::open(&path).await.unwrap();
+        log.append(&ins(1, 1, 'a')).await.unwrap();
+        log.append(&ins(1, 2, 'b')).await.unwrap();
+        log.clear().await.unwrap();
+        drop(log);
+
+        // The file still exists but is empty — load returns no ops.
         let ops = OpLog::load(&path).await.unwrap();
         assert!(ops.is_empty());
 

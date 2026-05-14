@@ -74,6 +74,16 @@ impl Peer {
         *self.log.lock().await = Some(log);
     }
 
+    /// Truncate the op-log to zero bytes on clean shutdown so the next session
+    /// starts fresh. Crashes (no clean shutdown) leave the log intact for replay.
+    pub async fn clear_log(&self) {
+        if let Some(log) = self.log.lock().await.as_mut() {
+            if let Err(e) = log.clear().await {
+                warn!("failed to clear op-log on shutdown: {e}");
+            }
+        }
+    }
+
     /// Apply ops loaded from disk at startup — no broadcasting, no re-logging.
     ///
     /// Also advances `id_seq` past every counter this peer used in previous
