@@ -26,6 +26,7 @@ use tracing::{info, warn};
 
 use crate::crdt::sequence::{Op, Rga};
 use crate::network::protocol::Message;
+use crate::storage::persistence::OpLog;
 use crate::PeerId;
 
 const CHAN_CAP: usize = 256;
@@ -43,6 +44,8 @@ pub struct Peer {
     /// Sending here fans a message out to every active peer-writer task.
     broadcast_tx: broadcast::Sender<Message>,
     peers_count: Arc<AtomicUsize>,
+    /// Optional persistence log. When set, every applied op is appended.
+    log: Arc<Mutex<Option<OpLog>>>,
 }
 
 impl Peer {
@@ -54,6 +57,20 @@ impl Peer {
             seq: Arc::new(AtomicU64::new(0)),
             broadcast_tx,
             peers_count: Arc::new(AtomicUsize::new(0)),
+            log: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Attach a persistence log. All subsequent ops (local and remote) are appended.
+    pub async fn set_log(&self, log: OpLog) {
+        *self.log.lock().await = Some(log);
+    }
+
+    /// Apply ops loaded from disk at startup — no broadcasting, no re-logging.
+    pub async fn replay_ops(&self, ops: Vec<Op>) {
+        let mut doc = self.doc.lock().await;
+        for op in &ops {
+            doc.apply(op);
         }
     }
 
@@ -101,10 +118,13 @@ impl Peer {
 
     // ── document API ──────────────────────────────────────────────────────────
 
-    /// Apply an op generated locally, then broadcast it to all connected peers.
+    /// Apply an op generated locally, persist it, then broadcast to all peers.
     pub async fn local_op(&self, op: Op) -> Result<()> {
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
         self.doc.lock().await.apply(&op);
+        if let Some(log) = self.log.lock().await.as_mut() {
+            log.append(&op).await?;
+        }
         // Ignore send errors: no connected peers yet is fine.
         let _ = self.broadcast_tx.send(Message::Op {
             from: self.peer_id,
@@ -114,15 +134,31 @@ impl Peer {
         Ok(())
     }
 
-    /// Apply a message received from a remote peer.
+    /// Apply a message received from a remote peer, persisting ops if a log is set.
     /// Does NOT re-broadcast — callers are responsible for fan-out topology.
     pub async fn remote_op(&self, msg: Message) {
         match msg {
-            Message::Op { op, .. } => self.doc.lock().await.apply(&op),
+            Message::Op { op, .. } => {
+                self.doc.lock().await.apply(&op);
+                if let Some(log) = self.log.lock().await.as_mut() {
+                    if let Err(e) = log.append(&op).await {
+                        warn!("op-log write failed: {e}");
+                    }
+                }
+            }
             Message::Sync { ops, .. } => {
                 let mut doc = self.doc.lock().await;
-                for op in ops {
-                    doc.apply(&op);
+                for op in &ops {
+                    doc.apply(op);
+                }
+                drop(doc);
+                if let Some(log) = self.log.lock().await.as_mut() {
+                    for op in &ops {
+                        if let Err(e) = log.append(op).await {
+                            warn!("op-log write failed during sync: {e}");
+                            break;
+                        }
+                    }
                 }
             }
             Message::Hello { peer_id } => info!("hello from peer {peer_id}"),
