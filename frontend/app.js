@@ -11,6 +11,15 @@ const editor = $("editor");
 const logEl = $("log");
 const stateEl = $("state");
 
+// Auto-fill WS URL from the hostname the page was served from so a phone on
+// the same LAN connects to the right node without manual editing.
+{
+  const host = location.hostname === "127.0.0.1" || location.hostname === "localhost"
+    ? "127.0.0.1"
+    : location.hostname;
+  $("ws-url").value = `ws://${host}:8001`;
+}
+
 let ws = null;
 
 function setState(connected) {
@@ -32,6 +41,12 @@ function send(msg) {
     ws.send(JSON.stringify(msg));
   }
 }
+
+// After inserting N chars we expect N state updates from the server before the
+// cursor is final. Store the intended cursor position and the minimum text
+// length at which it should be applied so that intermediate state updates
+// (carrying partial results) don't clobber the cursor.
+let intendedCursor = null;   // { pos, minLen }
 
 $("connect").addEventListener("click", () => {
   const url = $("ws-url").value.trim();
@@ -55,13 +70,23 @@ $("connect").addEventListener("click", () => {
       return;
     }
     if (msg.type === "state") {
-      // Preserve cursor position across remote updates.
-      const start = editor.selectionStart;
-      const end = editor.selectionEnd;
       editor.value = msg.text;
       prev = msg.text; // sync diff baseline — prevents stale-offset deletes
-      editor.selectionStart = Math.min(start, msg.text.length);
-      editor.selectionEnd = Math.min(end, msg.text.length);
+
+      if (intendedCursor !== null && msg.text.length >= intendedCursor.minLen) {
+        // All our inserts have been reflected — place cursor at the intended spot.
+        const pos = Math.min(intendedCursor.pos, msg.text.length);
+        editor.selectionStart = pos;
+        editor.selectionEnd = pos;
+        intendedCursor = null;
+      } else if (intendedCursor !== null) {
+        // Intermediate update — leave cursor wherever the browser put it.
+      } else {
+        // Remote update — preserve the user's current cursor position.
+        const saved = Math.min(editor.selectionStart, msg.text.length);
+        editor.selectionStart = saved;
+        editor.selectionEnd = saved;
+      }
       log(`state len=${msg.text.length}`);
     } else {
       log(`recv ${msg.type}`);
@@ -86,23 +111,34 @@ editor.addEventListener("keydown", (e) => {
 
 editor.addEventListener("input", () => {
   const next = editor.value;
-  if (next.length === prev.length + 1) {
-    for (let i = 0; i < next.length; i++) {
-      if (i >= prev.length || next[i] !== prev[i]) {
-        send({ type: "local_insert", offset: i, ch: next[i] });
-        break;
-      }
+  const delta = next.length - prev.length;
+
+  if (delta > 0) {
+    // One or more characters inserted (single keystroke, paste, autocomplete).
+    // Find where the new chars begin (first mismatch from the left).
+    let start = 0;
+    while (start < prev.length && next[start] === prev[start]) start++;
+    for (let i = 0; i < delta; i++) {
+      // Each previously sent insert shifts all subsequent visible offsets by +1,
+      // so the next char must go at start + i (not a fixed offset).
+      send({ type: "local_insert", offset: start + i, ch: next[start + i] });
     }
-  } else if (next.length === prev.length - 1) {
-    // Prefer the cursor-captured offset; fall back to string diff.
-    let offset = pendingDeleteOffset;
-    if (offset === null || offset < 0) {
-      for (let i = 0; i < prev.length; i++) {
-        if (i >= next.length || prev[i] !== next[i]) { offset = i; break; }
-      }
+    // Record where the cursor should land after all state updates arrive.
+    intendedCursor = { pos: start + delta, minLen: next.length };
+  } else if (delta < 0) {
+    // One or more characters deleted (backspace, select-all+delete, etc.).
+    const deleteCount = -delta;
+    let offset = (deleteCount === 1 && pendingDeleteOffset !== null && pendingDeleteOffset >= 0)
+      ? pendingDeleteOffset
+      : (() => { for (let i = 0; i < prev.length; i++) { if (i >= next.length || prev[i] !== next[i]) return i; } return 0; })();
+    for (let i = 0; i < deleteCount; i++) {
+      // Each delete removes the char at `offset`; remaining chars shift left.
+      send({ type: "local_delete", offset });
     }
-    if (offset !== null) send({ type: "local_delete", offset });
+    intendedCursor = null;
     pendingDeleteOffset = null;
   }
+  // delta === 0: autocorrect replaced same-length text — too ambiguous to handle safely.
+
   prev = next;
 });
