@@ -148,7 +148,9 @@ impl Peer {
         // accepting the connection and entering the select loop.
         let mut rx = self.broadcast_tx.subscribe();
 
-        let hello = serde_json::to_string(&Message::Hello { peer_id: self.peer_id })? + "\n";
+        let hello = serde_json::to_string(&Message::Hello {
+            peer_id: self.peer_id,
+        })? + "\n";
         w.write_all(hello.as_bytes()).await?;
 
         loop {

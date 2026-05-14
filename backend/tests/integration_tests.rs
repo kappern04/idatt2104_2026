@@ -36,15 +36,45 @@ async fn three_peers_converge_after_concurrent_edits() {
     p3.local_op(c.clone()).await.unwrap();
 
     // Simulate delivery — deliberately different orderings to stress commutativity.
-    p1.remote_op(Message::Op { from: 2, seq: 0, op: b.clone() }).await;
-    p1.remote_op(Message::Op { from: 3, seq: 0, op: c.clone() }).await;
+    p1.remote_op(Message::Op {
+        from: 2,
+        seq: 0,
+        op: b.clone(),
+    })
+    .await;
+    p1.remote_op(Message::Op {
+        from: 3,
+        seq: 0,
+        op: c.clone(),
+    })
+    .await;
 
-    p2.remote_op(Message::Op { from: 3, seq: 0, op: c.clone() }).await;
-    p2.remote_op(Message::Op { from: 1, seq: 0, op: a.clone() }).await;
+    p2.remote_op(Message::Op {
+        from: 3,
+        seq: 0,
+        op: c.clone(),
+    })
+    .await;
+    p2.remote_op(Message::Op {
+        from: 1,
+        seq: 0,
+        op: a.clone(),
+    })
+    .await;
 
     // p3 receives in reverse order.
-    p3.remote_op(Message::Op { from: 2, seq: 0, op: b.clone() }).await;
-    p3.remote_op(Message::Op { from: 1, seq: 0, op: a.clone() }).await;
+    p3.remote_op(Message::Op {
+        from: 2,
+        seq: 0,
+        op: b.clone(),
+    })
+    .await;
+    p3.remote_op(Message::Op {
+        from: 1,
+        seq: 0,
+        op: a.clone(),
+    })
+    .await;
 
     let t1 = p1.text().await;
     let t2 = p2.text().await;
