@@ -10,3 +10,6 @@ operations.log
 .idea/
 .vscode/
 *.swp
+
+# Local planning docs — not part of the graded submission
+docs/

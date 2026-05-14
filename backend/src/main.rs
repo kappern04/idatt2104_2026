@@ -1,13 +1,10 @@
 //! Entry point for a single peer node.
 //!
-//! Each invocation = one replica. Multiple peers are started on different ports and
-//! told about each other via `--connect`. The node:
-//!   1. loads (or creates) a persistent op-log,
-//!   2. opens a TCP/WebSocket listener for peer traffic,
-//!   3. opens a WebSocket bridge for an optional browser frontend,
-//!   4. accepts CLI commands on stdin.
+//! Each invocation is one replica. Start multiple nodes on different ports and
+//! connect them with `--connect`. CLI commands arrive on stdin (issue #9).
 
 use clap::Parser;
+use rustcrdt::network::peer::Peer;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustcrdt-node", about = "Peer-to-peer CRDT editor node")]
@@ -24,7 +21,7 @@ struct Cli {
     #[arg(long = "connect")]
     connect: Vec<String>,
 
-    /// Stable peer id. If omitted a random one is generated.
+    /// Stable peer id. If omitted a random one is generated from the current time.
     #[arg(long)]
     peer_id: Option<u64>,
 
@@ -43,14 +40,45 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    tracing::info!(?cli, "starting rustcrdt-node");
 
-    // TODO(week 2): wire crdt + network + storage + ui together here.
-    //   1. let store = storage::OpLog::open(&cli.log_path)?;
-    //   2. let node  = network::Peer::new(peer_id, store).await?;
-    //   3. node.connect_all(cli.connect).await?;
-    //   4. tokio::join!(node.listen(cli.port), ui::ws::serve(cli.ui_port, node.handle()), ui::cli::run(node.handle()));
+    let peer_id = cli.peer_id.unwrap_or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos() as u64
+    });
 
-    println!("rustcrdt-node skeleton — replace with real wiring (see TODOs in main.rs).");
+    tracing::info!(peer_id, port = cli.port, "starting rustcrdt-node");
+
+    let peer = Peer::new(peer_id);
+
+    // Spawn TCP listener.
+    {
+        let p = peer.clone();
+        let port = cli.port;
+        tokio::spawn(async move {
+            if let Err(e) = p.listen(port).await {
+                tracing::error!("listener failed: {e}");
+            }
+        });
+    }
+
+    // Spawn one outgoing-connection task per --connect address.
+    for addr in cli.connect {
+        let p = peer.clone();
+        tokio::spawn(async move { p.connect(addr).await });
+    }
+
+    // TODO(issue #7): load op-log from cli.log_path and replay into peer.
+    // TODO(issue #8): start WebSocket bridge on cli.ui_port.
+    // TODO(issue #9): run stdin CLI.
+
+    println!(
+        "Node {peer_id} listening on :{}.  Press Ctrl-C to stop.",
+        cli.port
+    );
+
+    tokio::signal::ctrl_c().await?;
+    tracing::info!("shutting down");
     Ok(())
 }
