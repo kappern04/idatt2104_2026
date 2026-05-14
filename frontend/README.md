@@ -31,6 +31,11 @@ ip route get 1 | awk '{print $7}'   # or: ifconfig | grep "inet "
 Note the address that starts with `192.168.x.x` or `10.x.x.x` — call it
 `<LAPTOP_IP>`.
 
+**Using the phone's Personal Hotspot?** The laptop gets a `172.20.10.x`
+address on the hotspot network — use that as `<LAPTOP_IP>`. The phone
+can reach the laptop over the hotspot even when on cellular data, so no
+tunnelling is needed.
+
 ### Step 2 — start the node
 
 ```pwsh
