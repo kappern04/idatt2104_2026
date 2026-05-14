@@ -4,13 +4,14 @@ Static web client for a `rustcrdt-node`. Open `index.html` directly in a
 browser, or serve the folder with any static file server, e.g.:
 
 ```pwsh
-# --bind 127.0.0.1 is required on Windows — without it Python binds to [::] (IPv6)
-# and the browser receives http://[::]:5173/ which is invalid (ERR_ADDRESS_INVALID).
-python  -m http.server 5173 --bind 127.0.0.1
-# On Windows, if `python` is not on PATH:
-py      -m http.server 5173 --bind 127.0.0.1
-# On macOS / Linux if `python` invokes Python 2:
-python3 -m http.server 5173 --bind 127.0.0.1
+# Run from the repo root. --bind 127.0.0.1 prevents Windows from binding
+# to [::] (IPv6 any-address) which causes ERR_ADDRESS_INVALID in the browser.
+py      -m http.server 5173 --bind 127.0.0.1 --directory frontend
+python3 -m http.server 5173 --bind 127.0.0.1 --directory frontend
+
+# Or cd into the frontend folder first, then omit --directory:
+cd frontend
+py -m http.server 5173 --bind 127.0.0.1
 ```
 
 Then connect to a running node's UI WebSocket port (default `ws://127.0.0.1:8001`).
