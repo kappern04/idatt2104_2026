@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::crdt::sequence::Op;
 use crate::PeerId;
 
-/// Envelope around every message sent between peers.
+/// Envelope around every message sent between peers and the browser UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
@@ -20,6 +20,9 @@ pub enum Message {
     /// Bulk catch-up: a reconnecting peer sends all ops it holds so the remote
     /// can apply any it missed while the connection was down.
     Sync { from: PeerId, ops: Vec<Op> },
+    /// Full document text snapshot sent to browser clients after every applied op.
+    /// The browser is intentionally dumb — it never runs the RGA itself.
+    State { text: String },
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────

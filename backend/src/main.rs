@@ -6,6 +6,7 @@
 use clap::Parser;
 use rustcrdt::network::peer::Peer;
 use rustcrdt::storage::persistence::OpLog;
+use rustcrdt::ui::ws;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustcrdt-node", about = "Peer-to-peer CRDT editor node")]
@@ -79,7 +80,17 @@ async fn main() -> anyhow::Result<()> {
     let log = OpLog::open(&cli.log_path).await?;
     peer.set_log(log).await;
 
-    // TODO(issue #8): start WebSocket bridge on cli.ui_port.
+    // Spawn WebSocket UI bridge.
+    {
+        let p = peer.clone();
+        let ui_port = cli.ui_port;
+        tokio::spawn(async move {
+            if let Err(e) = ws::serve(ui_port, p).await {
+                tracing::error!("WebSocket bridge failed: {e}");
+            }
+        });
+    }
+
     // TODO(issue #9): run stdin CLI.
 
     println!(
