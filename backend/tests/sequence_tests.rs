@@ -155,7 +155,7 @@ fn three_concurrent_inserts_converge_in_all_orderings() {
 proptest! {
     /// A single insert applied twice must look the same as applied once.
     #[test]
-    fn prop_insert_idempotent(p in 1u64..=10, c in 1u64..=100, ch in 'a'..='z') {
+    fn prop_insert_idempotent(p in 1u64..=10, c in 1u64..=100, ch in (b'a'..=b'z').prop_map(|b| b as char)) {
         let op = mk_insert(None, p, c, ch);
         let once = apply_all(&[op.clone()]);
         let twice = {
@@ -170,8 +170,8 @@ proptest! {
     /// Two concurrent inserts must produce the same text regardless of order.
     #[test]
     fn prop_concurrent_inserts_commute(
-        p1 in 1u64..=4,  c1 in 1u64..=10, ch1 in 'a'..='m',
-        p2 in 5u64..=8,  c2 in 1u64..=10, ch2 in 'n'..='z',
+        p1 in 1u64..=4,  c1 in 1u64..=10, ch1 in (b'a'..=b'm').prop_map(|b| b as char),
+        p2 in 5u64..=8,  c2 in 1u64..=10, ch2 in (b'n'..=b'z').prop_map(|b| b as char),
     ) {
         let op1 = mk_insert(None, p1, c1, ch1);
         let op2 = mk_insert(None, p2, c2, ch2);
@@ -188,7 +188,9 @@ proptest! {
         p1 in 1u64..=3,  c1 in 1u64..=10,
         p2 in 4u64..=6,  c2 in 1u64..=10,
         p3 in 7u64..=9,  c3 in 1u64..=10,
-        ch1 in 'a'..='i', ch2 in 'j'..='r', ch3 in 's'..='z',
+        ch1 in (b'a'..=b'i').prop_map(|b| b as char),
+        ch2 in (b'j'..=b'r').prop_map(|b| b as char),
+        ch3 in (b's'..=b'z').prop_map(|b| b as char),
     ) {
         let op1 = mk_insert(None, p1, c1, ch1);
         let op2 = mk_insert(None, p2, c2, ch2);
