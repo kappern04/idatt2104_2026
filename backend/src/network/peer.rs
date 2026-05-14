@@ -75,10 +75,32 @@ impl Peer {
     }
 
     /// Apply ops loaded from disk at startup — no broadcasting, no re-logging.
+    ///
+    /// Also advances `id_seq` past every counter this peer used in previous
+    /// sessions so that new ops never collide with replayed ids (which would
+    /// cause `Rga::apply` to silently discard them as duplicates).
     pub async fn replay_ops(&self, ops: Vec<Op>) {
-        let mut doc = self.doc.lock().await;
-        for op in &ops {
-            doc.apply(op);
+        let mut max_counter = 0u64;
+        {
+            let mut doc = self.doc.lock().await;
+            for op in &ops {
+                doc.apply(op);
+                let (op_peer, op_counter) = match op {
+                    Op::Insert { ch, .. } => (ch.id.peer_id, ch.id.counter),
+                    Op::Delete { target } => (target.peer_id, target.counter),
+                };
+                if op_peer == self.peer_id && op_counter > max_counter {
+                    max_counter = op_counter;
+                }
+            }
+        }
+        if max_counter >= self.id_seq.load(Ordering::Relaxed) {
+            self.id_seq.store(max_counter + 1, Ordering::Relaxed);
+            tracing::info!(
+                peer_id = self.peer_id,
+                id_seq = max_counter + 1,
+                "id_seq advanced past replayed ops",
+            );
         }
     }
 
