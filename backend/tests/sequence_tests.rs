@@ -16,12 +16,18 @@ fn id(peer_id: u64, counter: u64) -> Id {
 fn mk_insert(after: Option<Id>, peer_id: u64, counter: u64, value: char) -> Op {
     Op::Insert {
         after,
-        ch: Char { id: id(peer_id, counter), value, deleted: false },
+        ch: Char {
+            id: id(peer_id, counter),
+            value,
+            deleted: false,
+        },
     }
 }
 
 fn mk_delete(peer_id: u64, counter: u64) -> Op {
-    Op::Delete { target: id(peer_id, counter) }
+    Op::Delete {
+        target: id(peer_id, counter),
+    }
 }
 
 fn apply_all(ops: &[Op]) -> Rga {
@@ -148,6 +154,14 @@ fn three_concurrent_inserts_converge_in_all_orderings() {
     }
     // p3(3) > p2(2) > p1(1) so the sort order is c, b, a.
     assert_eq!(texts[0], "cba");
+}
+
+#[test]
+fn insert_with_missing_anchor_is_dropped() {
+    // An op whose anchor hasn't arrived yet must be silently ignored.
+    let mut r = Rga::new();
+    r.apply(&mk_insert(Some(id(99, 99)), 1, 1, 'a'));
+    assert_eq!(r.text(), "");
 }
 
 // ── property tests ────────────────────────────────────────────────────────────
