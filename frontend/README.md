@@ -96,6 +96,44 @@ Remove-NetFirewallRule -DisplayName "RustCRDT WS"
 
 ---
 
+## Cellular / public internet (phone not on the same Wi-Fi)
+
+If the phone is on **cellular data** the laptop's LAN IP is unreachable.
+Use [Tailscale](https://tailscale.com) — a free mesh VPN that gives every
+device a stable `100.x.x.x` IP reachable from any network.
+
+### Setup (one-time)
+
+1. Install Tailscale on the laptop:
+   ```pwsh
+   winget install Tailscale.Tailscale
+   ```
+2. Install **Tailscale** from the App Store on the iPhone.
+3. Log in with the **same account** on both devices.
+
+### Demo
+
+```pwsh
+# 1. Find the laptop's Tailscale IP (will be 100.x.x.x)
+tailscale ip -4
+
+# 2. Start the node (no change needed — it already binds 0.0.0.0)
+cargo run -p rustcrdt-node -- --port 9001 --ui-port 8001 --peer-id 1
+
+# 3. Serve the frontend on all interfaces so Tailscale traffic reaches it
+py -m http.server 5173 --bind 0.0.0.0 --directory frontend
+```
+
+On the phone open:
+```
+http://<TAILSCALE_IP>:5173/index.html
+```
+
+The WS URL field auto-fills to `ws://<TAILSCALE_IP>:8001` — click **Connect**.
+No firewall rules, no port forwarding, works on cellular.
+
+---
+
 ## Troubleshooting checklist
 
 - **Phone shows "connection refused" or times out**
