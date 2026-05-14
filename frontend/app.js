@@ -1,10 +1,8 @@
 // RustCRDT — thin browser client.
 //
-// This file is intentionally tiny: it opens a WebSocket to a local node and
-// forwards keystrokes as CRDT ops, then renders ops that arrive back. The real
-// logic — Ids, RGA, convergence — lives in the Rust node. The browser never
-// makes up an Id of its own; it only describes intent (e.g. "insert 'a' at
-// visible offset 3") and lets the node turn that into a CRDT op.
+// The browser never runs RGA logic. It only:
+//   1. Sends keystroke intents to the node as { type, offset, ch }.
+//   2. Receives { type: "state", text } frames and renders them.
 //
 // Wire format mirrors `backend/src/network/protocol.rs::Message`.
 
@@ -25,6 +23,8 @@ function log(line) {
   div.className = "entry";
   div.textContent = line;
   logEl.prepend(div);
+  // Keep the log from growing unbounded in long sessions.
+  while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
 }
 
 function send(msg) {
@@ -37,31 +37,53 @@ $("connect").addEventListener("click", () => {
   const url = $("ws-url").value.trim();
   if (ws) ws.close();
   ws = new WebSocket(url);
-  ws.onopen    = () => { setState(true);  log(`open ${url}`); };
-  ws.onclose   = () => { setState(false); log("close"); };
-  ws.onerror   = (e) => log(`error ${e.message ?? ""}`);
+  ws.onopen = () => {
+    setState(true);
+    log(`open ${url}`);
+  };
+  ws.onclose = () => {
+    setState(false);
+    log("close");
+  };
+  ws.onerror = (e) => log(`error ${e.message ?? ""}`);
   ws.onmessage = (e) => {
-    log(`recv ${e.data}`);
-    // TODO: parse Message::Op and apply to editor view.
+    let msg;
+    try {
+      msg = JSON.parse(e.data);
+    } catch {
+      log(`recv (unparseable) ${e.data}`);
+      return;
+    }
+    if (msg.type === "state") {
+      // Preserve cursor position across remote updates.
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      editor.value = msg.text;
+      editor.selectionStart = Math.min(start, msg.text.length);
+      editor.selectionEnd = Math.min(end, msg.text.length);
+      log(`state len=${msg.text.length}`);
+    } else {
+      log(`recv ${msg.type}`);
+    }
   };
 });
 
-// Local intent → ops. For now we just diff naively against the previous value;
-// the Rust node converts (offset, char) into a proper CRDT Op with Ids.
+// Local intent → ops.
+// Naive single-char diff; the Rust node converts (offset, char) into a
+// proper CRDT Op with Ids — the browser never generates Ids itself.
 let prev = "";
 editor.addEventListener("input", () => {
   const next = editor.value;
-  // Naive single-char diff suitable for demo; replace with a proper diff later.
   if (next.length === prev.length + 1) {
     for (let i = 0; i < next.length; i++) {
-      if (next[i] !== prev[i]) {
+      if (i >= prev.length || next[i] !== prev[i]) {
         send({ type: "local_insert", offset: i, ch: next[i] });
         break;
       }
     }
   } else if (next.length === prev.length - 1) {
     for (let i = 0; i < prev.length; i++) {
-      if (prev[i] !== next[i]) {
+      if (i >= next.length || prev[i] !== next[i]) {
         send({ type: "local_delete", offset: i });
         break;
       }
@@ -69,4 +91,3 @@ editor.addEventListener("input", () => {
   }
   prev = next;
 });
-
