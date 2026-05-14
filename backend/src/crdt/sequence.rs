@@ -57,8 +57,20 @@ impl Rga {
     pub fn apply(&mut self, op: &Op) {
         match op {
             Op::Insert { after, ch } => {
+                let duplicate = self.chars.iter().any(|c| c.id == ch.id);
+                tracing::debug!(
+                    op_type = "insert",
+                    peer_id = ch.id.peer_id,
+                    counter = ch.id.counter,
+                    payload = %ch.value,
+                    after_peer    = after.map(|id| id.peer_id),
+                    after_counter = after.map(|id| id.counter),
+                    duplicate,
+                    doc_len = self.chars.len(),
+                    "rga_apply",
+                );
                 // Idempotency: skip duplicate ids.
-                if self.chars.iter().any(|c| c.id == ch.id) {
+                if duplicate {
                     return;
                 }
 
@@ -83,6 +95,16 @@ impl Rga {
             }
 
             Op::Delete { target } => {
+                let entry = self.chars.iter().find(|c| c.id == *target);
+                tracing::debug!(
+                    op_type = "delete",
+                    peer_id = target.peer_id,
+                    counter = target.counter,
+                    found = entry.is_some(),
+                    tombstone = entry.map(|c| c.deleted).unwrap_or(false),
+                    doc_len = self.chars.len(),
+                    "rga_apply",
+                );
                 // Tombstone. Idempotent: already-deleted chars are unchanged.
                 if let Some(c) = self.chars.iter_mut().find(|c| c.id == *target) {
                     c.deleted = true;
