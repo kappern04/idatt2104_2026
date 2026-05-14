@@ -59,6 +59,7 @@ $("connect").addEventListener("click", () => {
       const start = editor.selectionStart;
       const end = editor.selectionEnd;
       editor.value = msg.text;
+      prev = msg.text; // sync diff baseline — prevents stale-offset deletes
       editor.selectionStart = Math.min(start, msg.text.length);
       editor.selectionEnd = Math.min(end, msg.text.length);
       log(`state len=${msg.text.length}`);
@@ -72,6 +73,17 @@ $("connect").addEventListener("click", () => {
 // Naive single-char diff; the Rust node converts (offset, char) into a
 // proper CRDT Op with Ids — the browser never generates Ids itself.
 let prev = "";
+
+// Capture the exact cursor position on keydown so that deletes of
+// duplicate characters (e.g. the first 'l' in "hello") target the right
+// CRDT entry instead of the first mismatch found by the string diff.
+let pendingDeleteOffset = null;
+editor.addEventListener("keydown", (e) => {
+  if (e.key === "Backspace") pendingDeleteOffset = editor.selectionStart - 1;
+  else if (e.key === "Delete") pendingDeleteOffset = editor.selectionStart;
+  else pendingDeleteOffset = null;
+});
+
 editor.addEventListener("input", () => {
   const next = editor.value;
   if (next.length === prev.length + 1) {
@@ -82,12 +94,15 @@ editor.addEventListener("input", () => {
       }
     }
   } else if (next.length === prev.length - 1) {
-    for (let i = 0; i < prev.length; i++) {
-      if (i >= next.length || prev[i] !== next[i]) {
-        send({ type: "local_delete", offset: i });
-        break;
+    // Prefer the cursor-captured offset; fall back to string diff.
+    let offset = pendingDeleteOffset;
+    if (offset === null || offset < 0) {
+      for (let i = 0; i < prev.length; i++) {
+        if (i >= next.length || prev[i] !== next[i]) { offset = i; break; }
       }
     }
+    if (offset !== null) send({ type: "local_delete", offset });
+    pendingDeleteOffset = null;
   }
   prev = next;
 });
