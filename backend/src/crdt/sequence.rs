@@ -90,4 +90,14 @@ impl Rga {
             }
         }
     }
+
+    /// The `Id` of the n-th visible (non-deleted) character, 0-indexed.
+    /// Used by the WebSocket bridge to translate browser text offsets to CRDT anchors.
+    pub fn id_at_visible(&self, offset: usize) -> Option<Id> {
+        self.chars
+            .iter()
+            .filter(|c| !c.deleted)
+            .nth(offset)
+            .map(|c| c.id)
+    }
 }

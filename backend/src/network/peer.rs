@@ -24,7 +24,7 @@ use tokio::sync::{broadcast, Mutex};
 use tokio::time::sleep;
 use tracing::{info, warn};
 
-use crate::crdt::sequence::{Op, Rga};
+use crate::crdt::sequence::{Char, Id, Op, Rga};
 use crate::network::protocol::Message;
 use crate::storage::persistence::OpLog;
 use crate::PeerId;
@@ -46,11 +46,17 @@ pub struct Peer {
     peers_count: Arc<AtomicUsize>,
     /// Optional persistence log. When set, every applied op is appended.
     log: Arc<Mutex<Option<OpLog>>>,
+    /// Monotonic counter for generating unique local Op Ids (separate from the
+    /// wire sequence number so callers can create ops before calling local_op).
+    id_seq: Arc<AtomicU64>,
+    /// Emits the full document text after every applied op; browser clients subscribe.
+    ui_tx: broadcast::Sender<String>,
 }
 
 impl Peer {
     pub fn new(peer_id: PeerId) -> Self {
         let (broadcast_tx, _) = broadcast::channel(CHAN_CAP);
+        let (ui_tx, _) = broadcast::channel(CHAN_CAP);
         Peer {
             peer_id,
             doc: Arc::new(Mutex::new(Rga::new())),
@@ -58,6 +64,8 @@ impl Peer {
             broadcast_tx,
             peers_count: Arc::new(AtomicUsize::new(0)),
             log: Arc::new(Mutex::new(None)),
+            id_seq: Arc::new(AtomicU64::new(1)),
+            ui_tx,
         }
     }
 
@@ -72,6 +80,46 @@ impl Peer {
         for op in &ops {
             doc.apply(op);
         }
+    }
+
+    /// Subscribe to document-state notifications for the browser UI.
+    /// Each message is the full document text after an op was applied.
+    pub fn subscribe_ui(&self) -> broadcast::Receiver<String> {
+        self.ui_tx.subscribe()
+    }
+
+    /// Insert `ch` at visible text offset `visible_offset` (0 = prepend).
+    pub async fn browser_insert(&self, visible_offset: usize, ch: char) -> Result<()> {
+        let after = {
+            let doc = self.doc.lock().await;
+            if visible_offset == 0 {
+                None
+            } else {
+                doc.id_at_visible(visible_offset - 1)
+            }
+        };
+        let counter = self.id_seq.fetch_add(1, Ordering::Relaxed);
+        let op = Op::Insert {
+            after,
+            ch: Char {
+                id: Id {
+                    peer_id: self.peer_id,
+                    counter,
+                },
+                value: ch,
+                deleted: false,
+            },
+        };
+        self.local_op(op).await
+    }
+
+    /// Delete the visible character at `visible_offset`.
+    pub async fn browser_delete(&self, visible_offset: usize) -> Result<()> {
+        let target = self.doc.lock().await.id_at_visible(visible_offset);
+        if let Some(target) = target {
+            self.local_op(Op::Delete { target }).await?;
+        }
+        Ok(())
     }
 
     // ── networking ────────────────────────────────────────────────────────────
@@ -121,10 +169,15 @@ impl Peer {
     /// Apply an op generated locally, persist it, then broadcast to all peers.
     pub async fn local_op(&self, op: Op) -> Result<()> {
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
-        self.doc.lock().await.apply(&op);
+        let text = {
+            let mut doc = self.doc.lock().await;
+            doc.apply(&op);
+            doc.text()
+        };
         if let Some(log) = self.log.lock().await.as_mut() {
             log.append(&op).await?;
         }
+        let _ = self.ui_tx.send(text);
         // Ignore send errors: no connected peers yet is fine.
         let _ = self.broadcast_tx.send(Message::Op {
             from: self.peer_id,
@@ -139,19 +192,26 @@ impl Peer {
     pub async fn remote_op(&self, msg: Message) {
         match msg {
             Message::Op { op, .. } => {
-                self.doc.lock().await.apply(&op);
+                let text = {
+                    let mut doc = self.doc.lock().await;
+                    doc.apply(&op);
+                    doc.text()
+                };
                 if let Some(log) = self.log.lock().await.as_mut() {
                     if let Err(e) = log.append(&op).await {
                         warn!("op-log write failed: {e}");
                     }
                 }
+                let _ = self.ui_tx.send(text);
             }
             Message::Sync { ops, .. } => {
-                let mut doc = self.doc.lock().await;
-                for op in &ops {
-                    doc.apply(op);
-                }
-                drop(doc);
+                let text = {
+                    let mut doc = self.doc.lock().await;
+                    for op in &ops {
+                        doc.apply(op);
+                    }
+                    doc.text()
+                };
                 if let Some(log) = self.log.lock().await.as_mut() {
                     for op in &ops {
                         if let Err(e) = log.append(op).await {
@@ -160,8 +220,11 @@ impl Peer {
                         }
                     }
                 }
+                let _ = self.ui_tx.send(text);
             }
             Message::Hello { peer_id } => info!("hello from peer {peer_id}"),
+            // State frames are browser-only; peers never send them.
+            Message::State { .. } => {}
         }
     }
 
