@@ -157,7 +157,7 @@ proptest! {
     #[test]
     fn prop_insert_idempotent(p in 1u64..=10, c in 1u64..=100, ch in (b'a'..=b'z').prop_map(|b| b as char)) {
         let op = mk_insert(None, p, c, ch);
-        let once = apply_all(&[op.clone()]);
+        let once = apply_all(std::slice::from_ref(&op));
         let twice = {
             let mut r = Rga::new();
             r.apply(&op);

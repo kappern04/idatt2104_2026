@@ -1,4 +1,4 @@
-# RustCRDT
+    # RustCRDT
 
 > **IDATT2104 — Networked & Distributed Programming, spring 2026**
 > Peer-to-peer collaborative text editor built around custom Conflict-free
