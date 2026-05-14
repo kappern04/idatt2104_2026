@@ -5,6 +5,7 @@
 
 use clap::Parser;
 use rustcrdt::network::peer::Peer;
+use rustcrdt::storage::persistence::OpLog;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustcrdt-node", about = "Peer-to-peer CRDT editor node")]
@@ -69,7 +70,15 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move { p.connect(addr).await });
     }
 
-    // TODO(issue #7): load op-log from cli.log_path and replay into peer.
+    // Replay persisted ops before accepting connections.
+    let prior_ops = OpLog::load(&cli.log_path).await?;
+    if !prior_ops.is_empty() {
+        tracing::info!("replaying {} ops from {}", prior_ops.len(), cli.log_path);
+    }
+    peer.replay_ops(prior_ops).await;
+    let log = OpLog::open(&cli.log_path).await?;
+    peer.set_log(log).await;
+
     // TODO(issue #8): start WebSocket bridge on cli.ui_port.
     // TODO(issue #9): run stdin CLI.
 
