@@ -42,6 +42,12 @@ function send(msg) {
   }
 }
 
+// After inserting N chars we expect N state updates from the server before the
+// cursor is final. Store the intended cursor position and the minimum text
+// length at which it should be applied so that intermediate state updates
+// (carrying partial results) don't clobber the cursor.
+let intendedCursor = null;   // { pos, minLen }
+
 $("connect").addEventListener("click", () => {
   const url = $("ws-url").value.trim();
   if (ws) ws.close();
@@ -64,13 +70,23 @@ $("connect").addEventListener("click", () => {
       return;
     }
     if (msg.type === "state") {
-      // Preserve cursor position across remote updates.
-      const start = editor.selectionStart;
-      const end = editor.selectionEnd;
       editor.value = msg.text;
       prev = msg.text; // sync diff baseline — prevents stale-offset deletes
-      editor.selectionStart = Math.min(start, msg.text.length);
-      editor.selectionEnd = Math.min(end, msg.text.length);
+
+      if (intendedCursor !== null && msg.text.length >= intendedCursor.minLen) {
+        // All our inserts have been reflected — place cursor at the intended spot.
+        const pos = Math.min(intendedCursor.pos, msg.text.length);
+        editor.selectionStart = pos;
+        editor.selectionEnd = pos;
+        intendedCursor = null;
+      } else if (intendedCursor !== null) {
+        // Intermediate update — leave cursor wherever the browser put it.
+      } else {
+        // Remote update — preserve the user's current cursor position.
+        const saved = Math.min(editor.selectionStart, msg.text.length);
+        editor.selectionStart = saved;
+        editor.selectionEnd = saved;
+      }
       log(`state len=${msg.text.length}`);
     } else {
       log(`recv ${msg.type}`);
@@ -107,6 +123,8 @@ editor.addEventListener("input", () => {
       // so the next char must go at start + i (not a fixed offset).
       send({ type: "local_insert", offset: start + i, ch: next[start + i] });
     }
+    // Record where the cursor should land after all state updates arrive.
+    intendedCursor = { pos: start + delta, minLen: next.length };
   } else if (delta < 0) {
     // One or more characters deleted (backspace, select-all+delete, etc.).
     const deleteCount = -delta;
@@ -117,6 +135,7 @@ editor.addEventListener("input", () => {
       // Each delete removes the char at `offset`; remaining chars shift left.
       send({ type: "local_delete", offset });
     }
+    intendedCursor = null;
     pendingDeleteOffset = null;
   }
   // delta === 0: autocorrect replaced same-length text — too ambiguous to handle safely.
