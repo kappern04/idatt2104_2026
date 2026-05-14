@@ -42,8 +42,9 @@ The UI bridge already binds `0.0.0.0:8001`, so no backend change is needed.
 ### Step 3 — serve the frontend on the LAN
 
 ```pwsh
-# Windows (Python) — from repo root
-py -m http.server 5173 --bind 0.0.0.0 --directory frontend
+# Windows (Python) — from repo root.
+# Use 0.0.0.0 so the phone can reach the server over Wi-Fi.
+py      -m http.server 5173 --bind 0.0.0.0 --directory frontend
 
 # macOS / Linux
 python3 -m http.server 5173 --bind 0.0.0.0 --directory frontend
@@ -51,6 +52,13 @@ python3 -m http.server 5173 --bind 0.0.0.0 --directory frontend
 # Node.js alternative
 npx http-server frontend -a 0.0.0.0 -p 5173
 ```
+
+> **Note:** If you are connecting the phone via **USB** (iPhone Personal
+> Hotspot / tethering) rather than Wi-Fi, the laptop creates a separate
+> virtual network adapter. Use `0.0.0.0` so the server listens on that
+> adapter too, then open `http://<USB_ADAPTER_IP>:5173/index.html` on
+> the phone. Run `ipconfig` and look for the "Remote NDIS" or "Apple
+> Mobile Device" adapter for the correct IP.
 
 ### Step 4 — open on your phone
 
