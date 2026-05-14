@@ -1,4 +1,4 @@
-    # RustCRDT
+# RustCRDT
 
 > **IDATT2104 — Networked & Distributed Programming, spring 2026**
 > Peer-to-peer collaborative text editor built around custom Conflict-free
@@ -81,12 +81,12 @@ the wire protocol defined in `backend/src/network/protocol.rs`.
 - ✅ Cargo workspace, module layout, dependency wiring
 - ✅ G-Counter CRDT + commutativity / associativity / idempotency tests
 - ✅ OR-Set CRDT with tombstones + concurrent add/remove test
-- ⏳ RGA sequence CRDT
-- ⏳ Async TCP/WebSocket peer transport with reconnection
+- ✅ RGA sequence CRDT — insert-after with tombstone deletes, concurrent-insert tie-breaking, full property tests (commutativity, associativity, idempotency)
+- ✅ Async TCP peer transport with exponential-backoff reconnection (`backend/src/network/peer.rs`)
+- ✅ Multi-peer convergence tests — in-process simulation of concurrent edits, duplicate delivery, and offline-then-sync (`backend/tests/integration_tests.rs`)
 - ⏳ JSON-Lines persistence + replay on startup
 - ⏳ WebSocket bridge to the browser frontend
 - ⏳ CLI demo loop
-- ⏳ Multi-peer integration tests with simulated delay
 
 ## Roadmap (deadline 26 May)
 
@@ -168,11 +168,12 @@ This runs:
   concurrent-add-wins-over-remove scenario, and merge idempotency. Full
   commutativity / associativity coverage is **planned** alongside the next
   CRDT iteration.
-- **Sequence (RGA) test stub** (`backend/tests/sequence_tests.rs`) — currently
-  `#[ignore]`-d; will be enabled once `Rga::apply` is implemented in phase 3.
-- **Multi-peer integration test stub** (`backend/tests/integration_tests.rs`)
-  — currently `#[ignore]`-d; will be filled in once the networking layer
-  lands in phase 2.
+- **Sequence (RGA) tests** (`backend/tests/sequence_tests.rs`) — 8 targeted
+  unit tests plus 3 `proptest` properties covering commutativity, associativity,
+  and idempotency. All enabled; none ignored.
+- **Multi-peer integration tests** (`backend/tests/integration_tests.rs`) —
+  three tests: concurrent edits across three peers, idempotent duplicate
+  delivery, and an offline peer re-syncing via a `Sync` message. All enabled.
 
 Run everything including the ignored stubs with:
 
