@@ -139,8 +139,14 @@ cargo run -p rustcrdt-node -- --port 9002 --ui-port 8002 --peer-id 2 --connect 1
 cargo run -p rustcrdt-node -- --port 9003 --ui-port 8003 --peer-id 3 --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
 ```
 
-Open `frontend/index.html` three times and point each tab to a node's
+Open `frontend/index.html` three times (or serve with
+`py -m http.server 5173 --bind 0.0.0.0 --directory frontend` and open
+`http://localhost:5173/index.html`) and point each tab to a node's
 `ws://127.0.0.1:80xx` URL to see live convergence as you type.
+
+To run the demo across devices on the same Wi-Fi (e.g. laptop + phone),
+see [`frontend/README.md`](frontend/README.md) for LAN IP discovery,
+firewall rules, and a step-by-step acceptance test.
 
 Once the network layer lands (week 2), the CLI also accepts commands on
 stdin:
