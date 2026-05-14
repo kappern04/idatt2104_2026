@@ -47,8 +47,7 @@ The UI bridge already binds `0.0.0.0:8001`, so no backend change is needed.
 ### Step 3 — serve the frontend on the LAN
 
 ```pwsh
-# Windows (Python) — from repo root.
-# Use 0.0.0.0 so the phone can reach the server over Wi-Fi.
+# Windows (Python) — from repo root
 py      -m http.server 5173 --bind 0.0.0.0 --directory frontend
 
 # macOS / Linux
@@ -58,23 +57,24 @@ python3 -m http.server 5173 --bind 0.0.0.0 --directory frontend
 npx http-server frontend -a 0.0.0.0 -p 5173
 ```
 
-> **Note:** If you are connecting the phone via **USB** (iPhone Personal
-> Hotspot / tethering) rather than Wi-Fi, the laptop creates a separate
-> virtual network adapter. Use `0.0.0.0` so the server listens on that
-> adapter too, then open `http://<USB_ADAPTER_IP>:5173/index.html` on
-> the phone. Run `ipconfig` and look for the "Remote NDIS" or "Apple
-> Mobile Device" adapter for the correct IP.
+> **`0.0.0.0` is a bind address, not a URL.**
+> It tells the server to accept connections on *all* network interfaces.
+> Do **not** open `http://0.0.0.0:5173/` in a browser — that will fail
+> with `ERR_ADDRESS_INVALID`.
+> Use the actual addresses shown in Step 4.
 
-### Step 4 — open on your phone
+### Step 4 — which URL to open
 
-Make sure the phone is on the **same Wi-Fi** as the laptop, then open:
+| Device | URL to open |
+|--------|-------------|
+| Laptop browser | `http://127.0.0.1:5173/index.html` |
+| Phone browser  | `http://<LAPTOP_IP>:5173/index.html` |
 
-```
-http://<LAPTOP_IP>:5173/index.html
-```
+`<LAPTOP_IP>` is the address from Step 1 (e.g. `172.20.10.2` on a phone
+hotspot, or `192.168.x.x` on Wi-Fi).
 
-The WS URL field auto-fills to `ws://<LAPTOP_IP>:8001` — just click
-**Connect**.
+The WS URL field auto-fills to `ws://<LAPTOP_IP>:8001` on the phone — just
+click **Connect**.
 
 > **Security note:** Binding to `0.0.0.0` exposes both the HTTP server and
 > the node's WebSocket port to everyone on the LAN. This is fine for a local
