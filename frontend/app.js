@@ -99,10 +99,12 @@ editor.addEventListener("input", () => {
 
   if (delta > 0) {
     // One or more characters inserted (single keystroke, paste, autocomplete).
-    // Find where the new chars start (first mismatch from the left).
+    // Find where the new chars begin (first mismatch from the left).
     let start = 0;
     while (start < prev.length && next[start] === prev[start]) start++;
     for (let i = 0; i < delta; i++) {
+      // Each previously sent insert shifts all subsequent visible offsets by +1,
+      // so the next char must go at start + i (not a fixed offset).
       send({ type: "local_insert", offset: start + i, ch: next[start + i] });
     }
   } else if (delta < 0) {
