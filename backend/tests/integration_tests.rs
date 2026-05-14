@@ -81,12 +81,12 @@ async fn three_peers_converge_after_concurrent_edits() {
     p3.local_op(c.clone()).await.unwrap();
 
     // Different delivery orderings stress commutativity.
-    deliver(&p1, 2, &[b.clone()]).await;
-    deliver(&p1, 3, &[c.clone()]).await;
-    deliver(&p2, 3, &[c.clone()]).await;
-    deliver(&p2, 1, &[a.clone()]).await;
-    deliver(&p3, 2, &[b.clone()]).await;
-    deliver(&p3, 1, &[a.clone()]).await;
+    deliver(&p1, 2, std::slice::from_ref(&b)).await;
+    deliver(&p1, 3, std::slice::from_ref(&c)).await;
+    deliver(&p2, 3, std::slice::from_ref(&c)).await;
+    deliver(&p2, 1, std::slice::from_ref(&a)).await;
+    deliver(&p3, 2, std::slice::from_ref(&b)).await;
+    deliver(&p3, 1, std::slice::from_ref(&a)).await;
 
     let (t1, t2, t3) = (p1.text().await, p2.text().await, p3.text().await);
     assert_eq!(t1, t2, "p1 and p2 diverged: {t1:?} vs {t2:?}");
@@ -153,7 +153,7 @@ async fn concurrent_delete_and_insert_converge() {
     let op_c = ins_after(1, 1, 1, 2, 'c');
     for op in &[op_a, op_c] {
         p1.local_op(op.clone()).await.unwrap();
-        deliver(&p2, 1, &[op.clone()]).await;
+        deliver(&p2, 1, std::slice::from_ref(op)).await;
     }
     assert_eq!(p1.text().await, "ac");
     assert_eq!(p2.text().await, "ac");
@@ -186,7 +186,7 @@ async fn insert_after_tombstone_anchor_is_stable() {
 
     for op in &[op_a.clone(), op_b.clone()] {
         p1.local_op(op.clone()).await.unwrap();
-        deliver(&p2, 1, &[op.clone()]).await;
+        deliver(&p2, 1, std::slice::from_ref(op)).await;
     }
 
     // p1 deletes 'a'; p2 inserts 'x' after 'a' (concurrently).
@@ -228,17 +228,17 @@ async fn simulated_network_delay_does_not_prevent_convergence() {
 
     // Deliver with delays — each peer receives ops in a different order.
     tokio::time::sleep(Duration::from_millis(10)).await;
-    deliver(&p1, 3, &[c.clone()]).await; // p1 gets c before b
+    deliver(&p1, 3, std::slice::from_ref(&c)).await; // p1 gets c before b
     tokio::time::sleep(Duration::from_millis(5)).await;
-    deliver(&p1, 2, &[b.clone()]).await;
+    deliver(&p1, 2, std::slice::from_ref(&b)).await;
 
-    deliver(&p2, 1, &[a.clone()]).await;
+    deliver(&p2, 1, std::slice::from_ref(&a)).await;
     tokio::time::sleep(Duration::from_millis(5)).await;
-    deliver(&p2, 3, &[c.clone()]).await;
+    deliver(&p2, 3, std::slice::from_ref(&c)).await;
 
-    deliver(&p3, 2, &[b.clone()]).await;
+    deliver(&p3, 2, std::slice::from_ref(&b)).await;
     tokio::time::sleep(Duration::from_millis(5)).await;
-    deliver(&p3, 1, &[a.clone()]).await;
+    deliver(&p3, 1, std::slice::from_ref(&a)).await;
 
     let (t1, t2, t3) = (p1.text().await, p2.text().await, p3.text().await);
     assert_eq!(t1, t2, "delay test p1/p2 diverged: {t1:?} vs {t2:?}");
@@ -273,8 +273,8 @@ async fn peer_disconnects_mid_edit_and_reconverges() {
     pb.local_op(op_pb1.clone()).await.unwrap();
 
     // pa and pb exchange ops with each other (but not pc).
-    deliver(&pa, 2, &[op_pb1.clone()]).await;
-    deliver(&pb, 1, &[op_pa1.clone()]).await;
+    deliver(&pa, 2, std::slice::from_ref(&op_pb1)).await;
+    deliver(&pb, 1, std::slice::from_ref(&op_pa1)).await;
 
     // pc edits while offline.
     let op_pc1 = ins(3, 1, 'y'); // pc inserts 'y' at start → "yhi" locally
@@ -288,7 +288,7 @@ async fn peer_disconnects_mid_edit_and_reconverges() {
     .await;
 
     // pa and pb receive pc's offline op.
-    deliver(&pa, 3, &[op_pc1.clone()]).await;
+    deliver(&pa, 3, std::slice::from_ref(&op_pc1)).await;
     deliver(&pb, 3, &[op_pc1]).await;
 
     let (ta, tb, tc) = (pa.text().await, pb.text().await, pc.text().await);
