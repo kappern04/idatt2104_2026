@@ -10,6 +10,13 @@ operations.log
 .idea/
 .vscode/
 *.swp
+.vs/
+.claude/
+.config/
+.cargo/
 
 # Local planning docs — not part of the graded submission
 docs/
+
+
+
