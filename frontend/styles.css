@@ -1,65 +1,182 @@
 :root {
-  --bg: #0e1116;
-  --fg: #d6deeb;
+  --bg:     #0e1116;
+  --fg:     #d6deeb;
   --accent: #82aaff;
-  --muted: #5f6e88;
-  --ok: #addb67;
-  --bad: #ef5350;
+  --muted:  #5f6e88;
+  --ok:     #addb67;
+  --bad:    #ef5350;
+  --border: #1f2735;
+  --input-bg: #1a2030;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+}
 
 body {
-  margin: 0;
   font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--fg);
-  height: 100vh;
   display: flex;
   flex-direction: column;
+  min-height: 100dvh;
 }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
 
 header {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #1f2735;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-header h1 { margin: 0; font-size: 1.1rem; color: var(--accent); }
+header h1 {
+  font-size: 1rem;
+  color: var(--accent);
+  white-space: nowrap;
+  margin-right: auto;
+}
 
-.status { display: flex; gap: 0.5rem; align-items: center; }
-.status input { background: #1a2030; color: var(--fg); border: 1px solid #2a3346; padding: 0.25rem 0.5rem; border-radius: 4px; }
-.status button { background: var(--accent); color: #0e1116; border: 0; padding: 0.3rem 0.75rem; border-radius: 4px; cursor: pointer; }
-.state { font-size: 0.8rem; padding: 0.15rem 0.5rem; border-radius: 999px; }
-.state.disconnected { background: rgba(239, 83, 80, 0.15); color: var(--bad); }
-.state.connected    { background: rgba(173, 219, 103, 0.15); color: var(--ok); }
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.status label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.status input {
+  background: var(--input-bg);
+  color: var(--fg);
+  border: 1px solid #2a3346;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  min-width: 0;
+  width: clamp(160px, 30vw, 280px);
+}
+
+.status input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.status button {
+  background: var(--accent);
+  color: #0e1116;
+  border: 0;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 36px;
+}
+
+.status button:active { opacity: 0.8; }
+
+.state {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.state.disconnected { background: rgba(239,83,80,.15);  color: var(--bad); }
+.state.connected    { background: rgba(173,219,103,.15); color: var(--ok); }
+
+/* ── Main layout ─────────────────────────────────────────────────────────── */
 
 main {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-rows: 1fr 160px;
+  grid-template-columns: 1fr;
   gap: 1px;
-  background: #1f2735;
+  background: var(--border);
+  min-height: 0;
 }
+
+@media (min-width: 640px) {
+  main {
+    grid-template-rows: 1fr;
+    grid-template-columns: 1fr 300px;
+  }
+}
+
+/* ── Editor ──────────────────────────────────────────────────────────────── */
 
 #editor {
   background: var(--bg);
   color: var(--fg);
   border: 0;
   padding: 1rem;
-  font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace;
+  font: 15px/1.6 ui-monospace, Menlo, Consolas, monospace;
   resize: none;
   outline: none;
+  width: 100%;
+  height: 100%;
+  touch-action: manipulation;
+  /* Prevents iOS from auto-zooming on focus */
+  font-size: max(16px, 1em);
 }
+
+/* ── Op log ──────────────────────────────────────────────────────────────── */
 
 #log {
   background: #0a0d12;
   padding: 0.5rem;
   overflow-y: auto;
-  font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+  font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace;
   color: var(--muted);
+  min-height: 0;
 }
-#log .entry { white-space: pre-wrap; word-break: break-all; margin-bottom: 0.25rem; }
 
+#log .entry {
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 0.2rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid #12161e;
+}
+
+/* ── Mobile tweaks ───────────────────────────────────────────────────────── */
+
+@media (max-width: 639px) {
+  main {
+    grid-template-rows: 1fr 120px;
+  }
+
+  header {
+    padding: 0.5rem 0.75rem;
+    gap: 0.4rem;
+  }
+
+  .status input {
+    width: clamp(120px, 50vw, 220px);
+  }
+}
+
+/* ── Safe-area insets (iPhone notch / home bar) ──────────────────────────── */
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
