@@ -43,7 +43,8 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let peer_id = cli.peer_id
+    let peer_id = cli
+        .peer_id
         .unwrap_or_else(|| uuid::Uuid::new_v4().as_u128() as u64);
 
     tracing::info!(peer_id, port = cli.port, "starting rustcrdt-node");
