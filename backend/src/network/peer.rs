@@ -24,6 +24,7 @@ use tokio::sync::{broadcast, Mutex};
 use tokio::time::sleep;
 use tracing::{info, warn};
 
+use crate::crdt::gcounter::GCounter;
 use crate::crdt::sequence::{Char, Id, Op, Rga};
 use crate::network::protocol::Message;
 use crate::storage::persistence::OpLog;
@@ -51,6 +52,8 @@ pub struct Peer {
     id_seq: Arc<AtomicU64>,
     /// Emits the full document text after every applied op; browser clients subscribe.
     ui_tx: broadcast::Sender<String>,
+    /// Tracks how many ops each peer has contributed, using a G-Counter.
+    op_counter: Arc<Mutex<GCounter>>,
 }
 
 impl Peer {
@@ -66,6 +69,7 @@ impl Peer {
             log: Arc::new(Mutex::new(None)),
             id_seq: Arc::new(AtomicU64::new(1)),
             ui_tx,
+            op_counter: Arc::new(Mutex::new(GCounter::new())),
         }
     }
 
@@ -213,6 +217,7 @@ impl Peer {
             doc.apply(&op);
             doc.text()
         };
+        self.op_counter.lock().await.increment(self.peer_id, 1);
         if let Some(log) = self.log.lock().await.as_mut() {
             log.append(&op).await?;
         }
@@ -237,6 +242,7 @@ impl Peer {
                     doc.apply(op);
                     doc.text()
                 };
+                self.op_counter.lock().await.increment(from, 1);
                 tracing::debug!(text_len = text.len(), "remote_op_applied");
                 if let Some(log) = self.log.lock().await.as_mut() {
                     if let Err(e) = log.append(op).await {
@@ -277,6 +283,11 @@ impl Peer {
     /// Number of currently open peer connections.
     pub fn peers_connected(&self) -> usize {
         self.peers_count.load(Ordering::Relaxed)
+    }
+
+    /// Per-peer op counts tracked by the G-Counter, sorted by peer id.
+    pub async fn op_counts(&self) -> Vec<(u64, u64)> {
+        self.op_counter.lock().await.counts()
     }
 
     // ── internal ──────────────────────────────────────────────────────────────

@@ -7,7 +7,12 @@
 //! independent of arrival order. Deletes set a tombstone bit so that the
 //! `after` anchor of subsequent inserts remains valid forever.
 //!
-//! See `docs/architecture.md` for the convergence argument.
+//! Convergence argument: two replicas that have applied the same set of
+//! operations are identical because (1) `Insert` is idempotent on duplicate
+//! ids, (2) the tie-break ordering is a total order on `Id` so concurrent
+//! inserts at the same anchor produce the same relative sequence regardless of
+//! arrival order, and (3) `Delete` only sets a boolean flag — applying it
+//! multiple times is a no-op.
 
 use serde::{Deserialize, Serialize};
 

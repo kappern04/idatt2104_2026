@@ -29,7 +29,7 @@ pub async fn process(peer: &Peer, line: &str) -> Result<bool> {
     match cmd {
         "insert" => {
             for ch in rest.chars() {
-                let len = peer.text().await.len();
+                let len = peer.text().await.chars().count();
                 peer.browser_insert(len, ch).await?;
             }
         }
@@ -48,7 +48,16 @@ pub async fn process(peer: &Peer, line: &str) -> Result<bool> {
             }
         }
         "text" => println!("{}", peer.text().await),
-        "peers" => println!("{} peer(s) connected", peer.peers_connected()),
+        "peers" => {
+            println!("{} peer(s) connected", peer.peers_connected());
+            let counts = peer.op_counts().await;
+            if !counts.is_empty() {
+                println!("ops applied per peer (G-Counter):");
+                for (pid, count) in counts {
+                    println!("  peer {pid}: {count}");
+                }
+            }
+        }
         "quit" | "q" => return Ok(false),
         _ => eprintln!("unknown command: {cmd}  (insert | delete | text | peers | quit)"),
     }

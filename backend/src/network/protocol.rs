@@ -16,6 +16,8 @@ pub enum Message {
     /// Handshake sent immediately after a TCP connection is established.
     Hello { peer_id: PeerId },
     /// A single CRDT operation. Repeated delivery is harmless — ops are idempotent.
+    /// `seq` is a per-sender monotonic counter included for observability and
+    /// log correlation only; the receiver never uses it for deduplication.
     Op { from: PeerId, seq: u64, op: Op },
     /// Bulk catch-up: a reconnecting peer sends all ops it holds so the remote
     /// can apply any it missed while the connection was down.

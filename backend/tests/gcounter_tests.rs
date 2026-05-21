@@ -3,6 +3,7 @@
 //! Verifies the three fundamental CRDT axioms — these are the same tests every
 //! state-based CRDT in this crate must pass.
 
+use proptest::prelude::*;
 use rustcrdt::crdt::gcounter::GCounter;
 
 fn counter(slots: &[(u64, u64)]) -> GCounter {
@@ -56,4 +57,60 @@ fn merge_is_associative() {
 fn value_is_sum_of_slots() {
     let g = counter(&[(1, 3), (2, 5), (3, 2)]);
     assert_eq!(g.value(), 10);
+}
+
+// ── property tests ────────────────────────────────────────────────────────────
+
+proptest! {
+    /// merge(A, B) == merge(B, A)
+    #[test]
+    fn prop_merge_is_commutative(
+        slots_a in prop::collection::vec((0u64..10, 0u64..=100), 0..=5),
+        slots_b in prop::collection::vec((0u64..10, 0u64..=100), 0..=5),
+    ) {
+        let a = counter(&slots_a);
+        let b = counter(&slots_b);
+
+        let mut ab = a.clone();
+        ab.merge(&b);
+
+        let mut ba = b.clone();
+        ba.merge(&a);
+
+        prop_assert_eq!(ab, ba);
+    }
+
+    /// merge(A, merge(B, C)) == merge(merge(A, B), C)
+    #[test]
+    fn prop_merge_is_associative(
+        slots_a in prop::collection::vec((0u64..10, 0u64..=100), 0..=5),
+        slots_b in prop::collection::vec((0u64..10, 0u64..=100), 0..=5),
+        slots_c in prop::collection::vec((0u64..10, 0u64..=100), 0..=5),
+    ) {
+        let a = counter(&slots_a);
+        let b = counter(&slots_b);
+        let c = counter(&slots_c);
+
+        let mut bc = b.clone();
+        bc.merge(&c);
+        let mut left = a.clone();
+        left.merge(&bc);
+
+        let mut ab = a.clone();
+        ab.merge(&b);
+        ab.merge(&c);
+
+        prop_assert_eq!(left, ab);
+    }
+
+    /// merge(A, A) == A
+    #[test]
+    fn prop_merge_is_idempotent(
+        slots in prop::collection::vec((0u64..10, 0u64..=100), 0..=5),
+    ) {
+        let a = counter(&slots);
+        let mut merged = a.clone();
+        merged.merge(&a);
+        prop_assert_eq!(merged, a);
+    }
 }
