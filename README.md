@@ -105,74 +105,78 @@ cargo build --workspace
 
 ## Usage
 
-### Starting the nodes
+### Running the nodes
 
-Open three terminals and start one peer node each:
+Start each node in its own terminal. Use `--port` for peer-to-peer TCP
+traffic and `--connect` to dial another peer on startup:
 
 ```pwsh
-# terminal 1
-cargo run -p rustcrdt-node -- --port 9001 --ui-port 8001 --peer-id 1
+# terminal 1 — first peer, listens on port 9001
+cargo run -p rustcrdt-node -- --port 9001 --peer-id 1
 
-# terminal 2
-cargo run -p rustcrdt-node -- --port 9002 --ui-port 8002 --peer-id 2 --connect 127.0.0.1:9001
+# terminal 2 — second peer, connects to the first
+cargo run -p rustcrdt-node -- --port 9002 --peer-id 2 --connect 127.0.0.1:9001
 
-# terminal 3
-cargo run -p rustcrdt-node -- --port 9003 --ui-port 8003 --peer-id 3 --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
+# terminal 3 — third peer, connects to both
+cargo run -p rustcrdt-node -- --port 9003 --peer-id 3 --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
 ```
 
-Each node accepts CLI commands on stdin:
+To run peers across multiple machines on the same network, replace
+`127.0.0.1` in `--connect` with the LAN IP of the target machine
+(e.g. `--connect 192.168.1.10:9001`).
+
+### CLI commands
+
+Each node reads commands from stdin:
 
 ```text
-insert hello world   # append text to the document
-delete 0 5           # delete 5 characters starting at position 0
-text                 # print the current document
-peers                # show number of connected peers
+insert hello world   # append text to the end of the document
+delete 0 5           # delete 5 characters starting at visible position 0
+text                 # print the current document text
+peers                # show connected peers and op counts per peer (G-Counter)
 quit                 # exit cleanly
 ```
 
-### Terminal-only demo (no browser required)
+Type `insert hello` in terminal 1, then `text` in terminal 2 — both replicas
+converge to the same document with no browser required.
 
-This shows P2P convergence using only two terminals:
+---
+
+### Optional — browser frontend
+
+The `frontend/` folder contains a static web client that visualises the
+document in real time. It connects to a node over WebSocket using the
+`--ui-port` flag.
+
+Start the nodes with `--ui-port` added:
 
 ```pwsh
-# terminal 1 — start peer 1
 cargo run -p rustcrdt-node -- --port 9001 --ui-port 8001 --peer-id 1
-```
-
-```pwsh
-# terminal 2 — start peer 2, connect to peer 1
 cargo run -p rustcrdt-node -- --port 9002 --ui-port 8002 --peer-id 2 --connect 127.0.0.1:9001
+cargo run -p rustcrdt-node -- --port 9003 --ui-port 8003 --peer-id 3 --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
 ```
 
-In terminal 1, type:
-```text
-insert hello
-```
-
-In terminal 2, type:
-```text
-text
-```
-
-Terminal 2 will print `hello` — the document has converged without any browser
-involved. Type `insert` on either side and run `text` on the other to keep
-verifying convergence.
-
-### Browser frontend — localhost
-
-Serve the frontend folder and open one tab per node:
+Serve the frontend:
 
 ```pwsh
-py      -m http.server 5173 --bind 127.0.0.1 --directory frontend
-python3 -m http.server 5173 --bind 127.0.0.1 --directory frontend
+# Windows
+py -m http.server 5173 --bind 0.0.0.0 --directory frontend
 ```
 
-Open `http://localhost:5173/index.html` and connect each tab to its node's
-WebSocket: `ws://127.0.0.1:8001`, `ws://127.0.0.1:8002`, `ws://127.0.0.1:8003`.
+```bash
+# macOS / Linux
+python3 -m http.server 5173 --bind 0.0.0.0 --directory frontend
+```
 
-### Browser frontend — LAN (laptop + phone on the same Wi-Fi)
+**Opening the frontend:**
 
-**Step 1 — find your laptop's LAN IP**
+On the machine serving the frontend:
+```text
+http://localhost:5173/index.html
+```
+
+On any other device on the same network, replace `localhost` with the LAN IP
+of the machine serving the frontend. To find that IP, run on the host machine:
 
 ```pwsh
 # Windows
@@ -182,27 +186,25 @@ ipconfig | findstr "IPv4"
 ip route get 1 | awk '{print $7}'
 ```
 
-Note the address starting with `192.168.x.x` or `10.x.x.x` — call it
-`<LAPTOP_IP>`. On a phone Personal Hotspot the laptop gets a `172.20.10.x`
-address — use that instead.
 
-**Step 2 — serve the frontend on the LAN**
-
-```pwsh
-py      -m http.server 5173 --bind 0.0.0.0 --directory frontend
-python3 -m http.server 5173 --bind 0.0.0.0 --directory frontend
-# Node.js alternative
-npx http-server frontend -a 0.0.0.0 -p 5173
+```text
+http://192.168.1.10:5173/index.html
 ```
 
+You will see a WebSocket field — this is where you tell the browser which node
+to talk to.
 
+**Is the node running on the same device as your browser?**
+Use `ws://127.0.0.1` followed by the node's `--ui-port`:
+```text
+ws://127.0.0.1:8001
+```
 
-| Device | URL to open |
-|--------|-------------|
-| Laptop | `http://127.0.0.1:5173/index.html` |
-| Phone  | `http://<LAPTOP_IP>:5173/index.html` |
-
-The WebSocket URL field auto-fills on the phone — click **Connect**.
+**Is the node running on a different device?**
+Use that device's LAN IP followed by the node's `--ui-port`:
+```text
+ws://192.168.1.10:8001
+```
 
 ---
 
