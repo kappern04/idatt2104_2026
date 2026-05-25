@@ -73,7 +73,7 @@ ordered sequence, which is what a text document actually requires.
 
 - **Sync catch-up** — when a peer reconnects it sends all ops it holds so the
   remote can apply any it missed while the connection was down.
-  (`backend/src/network/protocol.rs`)
+  (`backend/src/network/peer.rs`)
 
 - **JSON-Lines op-log persistence** — every applied operation is appended to
   `operations.log`. On startup the node replays the log to restore state, making
@@ -88,8 +88,12 @@ ordered sequence, which is what a text document actually requires.
 - **CLI interface** — `insert`, `delete`, `text`, `peers`, `quit` commands over
   stdin. (`backend/src/ui/cli.rs`)
 
-- **Static browser frontend** — `frontend/index.html` connects to any running
-  node over WebSocket and shows live collaborative editing.
+- **Static browser frontend** — `frontend/index.html` + `frontend/app.js` +
+  `frontend/styles.css`. Connects to any running node over WebSocket and
+  renders the shared document in real time. Features: connected/disconnected
+  status indicator, operation log sidebar showing each state update, and a
+  WebSocket URL field that auto-fills from the page hostname so the app works
+  on mobile without editing the URL manually.
 
 - **CI/CD pipeline** — `rustfmt`, `clippy -D warnings`, cross-platform tests
   (Ubuntu + Windows), branch coverage via `grcov` uploaded to Codecov,
@@ -223,23 +227,28 @@ cargo test --workspace
 This runs:
 
 - **G-Counter tests** (`backend/tests/gcounter_tests.rs`) — commutativity,
-  associativity, and idempotency verified by hand-crafted examples, plus a check
-  that `value()` equals the sum of all peer slots.
+  associativity, and idempotency verified by hand-crafted examples and 3
+  `proptest` properties, plus a check that `value()` equals the sum of all peer
+  slots.
 
 - **OR-Set tests** (`backend/tests/orset_tests.rs`) — basic add/contains, the
   concurrent-add-wins-over-remove scenario, merge idempotency, and full
   `proptest`-based coverage of commutativity, associativity, and idempotency
   across randomised inputs.
 
-- **Sequence (RGA) tests** (`backend/tests/sequence_tests.rs`) — 8 targeted
-  unit tests (empty document, sequential inserts, tombstone anchors, convergence
-  in all six orderings of three concurrent inserts) plus 3 `proptest` properties
-  for commutativity, associativity, and idempotency. All enabled; none ignored.
+- **Sequence (RGA) tests** (`backend/tests/sequence_tests.rs`) — 10 targeted
+  unit tests (empty document, single and sequential inserts, insert idempotency,
+  delete tombstoning, delete idempotency, tombstone-anchor stability, concurrent
+  inserts at the same anchor, convergence in all six orderings of three
+  concurrent inserts, and missing-anchor handling) plus 3 `proptest` properties
+  for insert idempotency, commutativity, and associativity. All enabled; none
+  ignored.
 
-- **Multi-peer integration tests** (`backend/tests/integration_tests.rs`) — 6
+- **Multi-peer integration tests** (`backend/tests/integration_tests.rs`) — 8
   tests covering: three-peer concurrent edits, duplicate op delivery, offline
   peer re-syncing via `Sync`, concurrent delete-vs-insert, network delay
-  simulation, and a full disconnect-edit-reconnect scenario.
+  simulation, a full disconnect-edit-reconnect scenario, insert-after-tombstone
+  anchor stability, and multiple ops per peer converging across three replicas.
 
 ---
 
@@ -278,9 +287,11 @@ cargo doc --workspace --no-deps --open
 
 ## Future Work / Known Limitations
 
-- **Unbounded tombstones.** Deleted entries in OR-Set and RGA are never removed.
-  Long-running systems need causal stability tracking to know when a tombstone is
-  safe to discard.
+- **Unbounded tombstones.** Deleted entries in the RGA are never removed; the
+  sequence grows monotonically. The OR-Set has a `compact()` method that
+  discards fully-dead elements (every add-tag tombstoned), but it is not called
+  automatically during normal operation. Compaction of partially-live elements
+  in either structure requires causal stability tracking to be safe.
 - **Fully-connected topology required.** Ops are not relayed between peers — each
   node must connect directly to every other node, or it will miss their edits.
   A gossip layer would remove this constraint.
@@ -300,23 +311,22 @@ cargo doc --workspace --no-deps --open
   the op-log is truncated so the next session starts empty. Only a crash
   (unclean exit) preserves the log for replay on restart. This is intentional
   for the demo but a real editor would persist state across clean shutdowns.
+- **Offline mode.** A disconnected node already accepts local edits (ops are
+  applied immediately and queued in the op-log); on reconnection the Sync
+  mechanism delivers all accumulated ops so replicas converge. What is missing
+  is an explicit offline-mode switch, state persistence across clean shutdowns,
+  and better UX (e.g. showing a "disconnected" indicator). There is also a
+  subtle interaction: if peer A quits cleanly (log cleared), restarts, and then
+  receives a Sync from peer B that includes ops peer A originally generated in
+  its previous session, the local ID counter must be advanced past those old
+  values — otherwise new inserts silently produce duplicate IDs and have no
+  visible effect. This is fixed in `peer.rs` (`id_seq` advancement in
+  `remote_op`), but a fuller offline mode would make these semantics explicit.
 - **No frontend tests.** The browser client is exercised manually only.
 
 ---
 
-## External Information / References
+## CI/CD Pipeline
 
-No third-party code is copied into this repository. CRDT theory and algorithm
-design draw on the following public material — all references are conceptual,
-not code imports:
-
-- Marc Shapiro, Nuno Preguiça, Carlos Baquero, Marek Zawirski —
-  *Conflict-free Replicated Data Types*, INRIA Research Report RR-7687 (2011).
-- Martin Kleppmann — *CRDTs: The Hard Parts* (2020 video lecture), referenced
-  by the assignment brief.
-- Hyun-Gul Roh, Myeongjae Jeon, Jin-Soo Kim, Joonwon Lee —
-  *Replicated Abstract Data Types: Building Blocks for Collaborative
-  Applications*, Journal of Parallel and Distributed Computing (2011) — the
-  original RGA paper.
-- The [Rust source-based coverage documentation](https://doc.rust-lang.org/rustc/instrument-coverage.html)
-  for the CI coverage setup.
+- **CI workflow:** <https://github.com/kappern04/idatt2104_2026/blob/main/.github/workflows/ci.yml>
+- **Release workflow:** <https://github.com/kappern04/idatt2104_2026/blob/main/.github/workflows/release.yml>

@@ -252,18 +252,22 @@ impl Peer {
                 let _ = self.ui_tx.send(text);
             }
             Message::Sync { ops, .. } => {
+                // Track which ops are genuinely new so we only log those.
+                let mut applied_indices: Vec<usize> = Vec::new();
                 let text = {
                     let mut doc = self.doc.lock().await;
                     // Multi-pass: retry ops whose anchor/target hasn't arrived yet.
                     // Each pass applies at least one op (progress), so this terminates
                     // in at most O(n) passes for n dependent ops in the batch.
-                    let mut pending: Vec<&Op> = ops.iter().collect();
+                    let mut pending: Vec<usize> = (0..ops.len()).collect();
                     loop {
                         let before = pending.len();
                         let mut retry = Vec::new();
-                        for op in pending {
-                            if doc.apply(op) == ApplyResult::MissingAnchor {
-                                retry.push(op);
+                        for &idx in &pending {
+                            match doc.apply(&ops[idx]) {
+                                ApplyResult::MissingAnchor => retry.push(idx),
+                                ApplyResult::Duplicate => {}
+                                ApplyResult::Applied => applied_indices.push(idx),
                             }
                         }
                         pending = retry;
@@ -276,20 +280,51 @@ impl Peer {
                     }
                     doc.text()
                 };
-                // G-Counter: track op counts per source peer for all synced ops.
+                // Advance id_seq past any ops this peer generated in a previous
+                // session that arrived via Sync. Without this, fresh inserts
+                // collide with those old IDs and are silently discarded as
+                // duplicates until the counter naturally surpasses the old max.
+                {
+                    let current = self.id_seq.load(Ordering::Relaxed);
+                    let max_own = ops
+                        .iter()
+                        .filter_map(|op| match op {
+                            Op::Insert { ch, .. } if ch.id.peer_id == self.peer_id => {
+                                Some(ch.id.counter)
+                            }
+                            Op::Delete { target } if target.peer_id == self.peer_id => {
+                                Some(target.counter)
+                            }
+                            _ => None,
+                        })
+                        .max();
+                    if let Some(max) = max_own {
+                        let needed = max + 1;
+                        if needed > current {
+                            self.id_seq.store(needed, Ordering::Relaxed);
+                            tracing::info!(
+                                peer_id = self.peer_id,
+                                id_seq = needed,
+                                "id_seq advanced after sync",
+                            );
+                        }
+                    }
+                }
+                // G-Counter: only count newly applied ops to avoid double-counting.
                 {
                     let mut counter = self.op_counter.lock().await;
-                    for op in &ops {
-                        let pid = match op {
+                    for &idx in &applied_indices {
+                        let pid = match &ops[idx] {
                             Op::Insert { ch, .. } => ch.id.peer_id,
                             Op::Delete { target } => target.peer_id,
                         };
                         counter.increment(pid, 1);
                     }
                 }
+                // Only log ops that were newly applied — duplicates are already on disk.
                 if let Some(log) = self.log.lock().await.as_mut() {
-                    for op in &ops {
-                        if let Err(e) = log.append(op).await {
+                    for &idx in &applied_indices {
+                        if let Err(e) = log.append(&ops[idx]).await {
                             warn!("op-log write failed during sync: {e}");
                             break;
                         }

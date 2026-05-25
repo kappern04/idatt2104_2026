@@ -104,9 +104,6 @@ async fn main() -> anyhow::Result<()> {
         _ = tokio::signal::ctrl_c() => {}
     }
 
-    // Clear the log on clean shutdown so the next session starts with an empty
-    // document. A crash (no clean shutdown) leaves the log intact for replay.
-    peer.clear_log().await;
     tracing::info!("shutting down");
     Ok(())
 }
