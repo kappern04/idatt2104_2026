@@ -56,6 +56,51 @@ fn merge_is_idempotent() {
     assert_eq!(a.contains(&"b"), snapshot.contains(&"b"));
 }
 
+#[test]
+fn compact_removes_dead_elements() {
+    let mut s: OrSet<&'static str> = OrSet::new();
+    s.add("live");
+    s.add("dead");
+    s.remove(&"dead");
+    assert!(s.contains(&"live"));
+    assert!(!s.contains(&"dead"));
+
+    s.compact();
+
+    // Membership is unchanged after compaction.
+    assert!(s.contains(&"live"));
+    assert!(!s.contains(&"dead"));
+}
+
+#[test]
+fn compact_does_not_affect_live_elements() {
+    let mut s: OrSet<u8> = OrSet::new();
+    s.add(1);
+    s.add(2);
+    s.remove(&1);
+    s.compact();
+    assert!(!s.contains(&1));
+    assert!(s.contains(&2));
+}
+
+#[test]
+fn compact_preserves_merge_correctness() {
+    // Replica A: adds "x", removes it, then compacts.
+    let mut a: OrSet<&'static str> = OrSet::new();
+    a.add("x");
+    a.remove(&"x");
+    a.compact();
+    assert!(!a.contains(&"x"));
+
+    // Replica B independently adds "x" with a fresh tag.
+    let mut b: OrSet<&'static str> = OrSet::new();
+    b.add("x");
+
+    // After merge, B's fresh tag makes "x" live again.
+    a.merge(&b);
+    assert!(a.contains(&"x"));
+}
+
 // ── property tests ────────────────────────────────────────────────────────────
 
 proptest! {

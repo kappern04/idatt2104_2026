@@ -28,21 +28,21 @@ pub async fn process(peer: &Peer, line: &str) -> Result<bool> {
 
     match cmd {
         "insert" => {
+            let mut len = peer.text().await.chars().count();
             for ch in rest.chars() {
-                let len = peer.text().await.chars().count();
                 peer.browser_insert(len, ch).await?;
+                len += 1;
             }
         }
         "delete" => {
             let mut args = rest.split_whitespace();
-            let pos: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or_else(|| {
+            let (Some(pos), Some(count)) = (
+                args.next().and_then(|s| s.parse::<usize>().ok()),
+                args.next().and_then(|s| s.parse::<usize>().ok()),
+            ) else {
                 eprintln!("usage: delete <pos> <len>");
-                0
-            });
-            let count: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or_else(|| {
-                eprintln!("usage: delete <pos> <len>");
-                0
-            });
+                return Ok(true);
+            };
             for _ in 0..count {
                 peer.browser_delete(pos).await?;
             }

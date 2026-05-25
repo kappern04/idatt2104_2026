@@ -47,6 +47,11 @@ impl OpLog {
         Ok(())
     }
 
+    /// Path of the underlying log file.
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
     /// Truncate the log to zero bytes.
     ///
     /// Call this on clean shutdown so the next session starts with an empty

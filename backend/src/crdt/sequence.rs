@@ -39,6 +39,18 @@ pub enum Op {
     Delete { target: Id },
 }
 
+/// Outcome of [`Rga::apply`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApplyResult {
+    /// The op was new and modified the document.
+    Applied,
+    /// The op was already present — idempotent no-op.
+    Duplicate,
+    /// The insert anchor or delete target has not arrived yet; retry after
+    /// the missing op is applied.
+    MissingAnchor,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Rga {
     chars: Vec<Char>,
@@ -59,7 +71,11 @@ impl Rga {
     }
 
     /// Apply a remote or local op. Safe to call multiple times with the same op.
-    pub fn apply(&mut self, op: &Op) {
+    ///
+    /// Returns [`ApplyResult::MissingAnchor`] when an `Insert`'s anchor or a
+    /// `Delete`'s target is not yet in the document. The caller should retry
+    /// once the missing op arrives (see `Message::Sync` handling in `peer.rs`).
+    pub fn apply(&mut self, op: &Op) -> ApplyResult {
         match op {
             Op::Insert { after, ch } => {
                 let duplicate = self.chars.iter().any(|c| c.id == ch.id);
@@ -74,17 +90,15 @@ impl Rga {
                     doc_len = self.chars.len(),
                     "rga_apply",
                 );
-                // Idempotency: skip duplicate ids.
                 if duplicate {
-                    return;
+                    return ApplyResult::Duplicate;
                 }
 
                 let start = match after {
                     None => 0,
                     Some(anchor) => match self.chars.iter().position(|c| c.id == *anchor) {
                         Some(i) => i + 1,
-                        // Anchor not yet delivered; skip — replayed from op-log on reconnect.
-                        None => return,
+                        None => return ApplyResult::MissingAnchor,
                     },
                 };
 
@@ -97,6 +111,7 @@ impl Rga {
                 }
 
                 self.chars.insert(pos, ch.clone());
+                ApplyResult::Applied
             }
 
             Op::Delete { target } => {
@@ -110,9 +125,16 @@ impl Rga {
                     doc_len = self.chars.len(),
                     "rga_apply",
                 );
-                // Tombstone. Idempotent: already-deleted chars are unchanged.
                 if let Some(c) = self.chars.iter_mut().find(|c| c.id == *target) {
-                    c.deleted = true;
+                    if c.deleted {
+                        ApplyResult::Duplicate
+                    } else {
+                        c.deleted = true;
+                        ApplyResult::Applied
+                    }
+                } else {
+                    // Target not in doc yet — may be out of order in a Sync batch.
+                    ApplyResult::MissingAnchor
                 }
             }
         }

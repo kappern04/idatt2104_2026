@@ -1,6 +1,6 @@
 # RustCRDT — Peer-to-Peer Collaborative Text Editor
 
-> IDATT2104 — Networked & Distributed Programming, spring 2026
+> IDATT2104 — Networked programming, spring 2026
 
 [![CI](https://github.com/kappern04/idatt2104_2026/actions/workflows/ci.yml/badge.svg)](https://github.com/kappern04/idatt2104_2026/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/kappern04/idatt2104_2026/branch/main/graph/badge.svg)](https://codecov.io/gh/kappern04/idatt2104_2026)
@@ -11,7 +11,13 @@
 - **API documentation:** <https://kappern04.github.io/idatt2104_2026/>
 
 ---
+## Preface
+IDATT2104 network programming voluntary project. This project is intended only as a demonstration of CRDT in the course idatt2104.
 
+Developer(s):
+Kasper Østerlie Gladsøy
+
+---
 ## Introduction
 
 RustCRDT is a peer-to-peer collaborative text editor where multiple nodes edit

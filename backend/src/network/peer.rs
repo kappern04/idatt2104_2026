@@ -25,7 +25,7 @@ use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::crdt::gcounter::GCounter;
-use crate::crdt::sequence::{Char, Id, Op, Rga};
+use crate::crdt::sequence::{ApplyResult, Char, Id, Op, Rga};
 use crate::network::protocol::Message;
 use crate::storage::persistence::OpLog;
 use crate::PeerId;
@@ -254,11 +254,39 @@ impl Peer {
             Message::Sync { ops, .. } => {
                 let text = {
                     let mut doc = self.doc.lock().await;
-                    for op in &ops {
-                        doc.apply(op);
+                    // Multi-pass: retry ops whose anchor/target hasn't arrived yet.
+                    // Each pass applies at least one op (progress), so this terminates
+                    // in at most O(n) passes for n dependent ops in the batch.
+                    let mut pending: Vec<&Op> = ops.iter().collect();
+                    loop {
+                        let before = pending.len();
+                        let mut retry = Vec::new();
+                        for op in pending {
+                            if doc.apply(op) == ApplyResult::MissingAnchor {
+                                retry.push(op);
+                            }
+                        }
+                        pending = retry;
+                        if pending.is_empty() || pending.len() == before {
+                            if !pending.is_empty() {
+                                warn!("{} sync op(s) dropped: anchor not found", pending.len());
+                            }
+                            break;
+                        }
                     }
                     doc.text()
                 };
+                // G-Counter: track op counts per source peer for all synced ops.
+                {
+                    let mut counter = self.op_counter.lock().await;
+                    for op in &ops {
+                        let pid = match op {
+                            Op::Insert { ch, .. } => ch.id.peer_id,
+                            Op::Delete { target } => target.peer_id,
+                        };
+                        counter.increment(pid, 1);
+                    }
+                }
                 if let Some(log) = self.log.lock().await.as_mut() {
                     for op in &ops {
                         if let Err(e) = log.append(op).await {
@@ -304,6 +332,21 @@ impl Peer {
         })? + "\n";
         w.write_all(hello.as_bytes()).await?;
 
+        // Send a catch-up Sync so the remote peer sees all ops we've applied.
+        // The lock is released before the async disk read to avoid holding it
+        // across an await point.
+        let log_path = self.log.lock().await.as_ref().map(|l| l.path().to_owned());
+        if let Some(path) = log_path {
+            let ops = OpLog::load(&path).await.unwrap_or_default();
+            if !ops.is_empty() {
+                let sync = serde_json::to_string(&Message::Sync {
+                    from: self.peer_id,
+                    ops,
+                })? + "\n";
+                w.write_all(sync.as_bytes()).await?;
+            }
+        }
+
         loop {
             tokio::select! {
                 // Inbound: a message from the remote peer.
@@ -324,7 +367,8 @@ impl Peer {
                             w.write_all(line.as_bytes()).await?;
                         }
                         Err(broadcast::error::RecvError::Lagged(n)) => {
-                            warn!("broadcast lagged by {n} messages");
+                            warn!("broadcast lagged by {n} messages; dropping connection to force re-sync");
+                            break;
                         }
                         Err(broadcast::error::RecvError::Closed) => break,
                     }

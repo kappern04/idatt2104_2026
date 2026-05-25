@@ -43,9 +43,12 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let peer_id = cli
-        .peer_id
-        .unwrap_or_else(|| uuid::Uuid::new_v4().as_u128() as u64);
+    let peer_id = cli.peer_id.unwrap_or_else(|| {
+        // XOR the two 64-bit halves of a random UUID to spread all 122 random
+        // bits across the full u64 output, rather than discarding half of them.
+        let (hi, lo) = uuid::Uuid::new_v4().as_u64_pair();
+        hi ^ lo
+    });
 
     tracing::info!(peer_id, port = cli.port, "starting rustcrdt-node");
 
