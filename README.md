@@ -91,9 +91,10 @@ ordered sequence, which is what a text document actually requires.
 - **Static browser frontend** — `frontend/index.html` + `frontend/app.js` +
   `frontend/styles.css`. Connects to any running node over WebSocket and
   renders the shared document in real time. Features: connected/disconnected
-  status indicator, operation log sidebar showing each state update, and a
-  WebSocket URL field that auto-fills from the page hostname so the app works
-  on mobile without editing the URL manually.
+  status indicator, an event log sidebar (logs connection lifecycle events and
+  the document length on each received state update), and a WebSocket URL field
+  that auto-fills from the page hostname so the app works on mobile without
+  editing the URL manually.
 
 - **CI/CD pipeline** — `rustfmt`, `clippy -D warnings`, cross-platform tests
   (Ubuntu + Windows), branch coverage via `grcov` uploaded to Codecov,
@@ -104,6 +105,13 @@ ordered sequence, which is what a text document actually requires.
 ## Installation
 
 Requires Rust 1.85 or newer. Install via [rustup](https://rustup.rs).
+
+The browser frontend is plain static HTML/JS — no build step required.
+To serve it you need either the
+[VS Code Live Server extension](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer)
+(local use only) **or** Python 3 (for LAN / mobile access). Python 3 ships
+with macOS and most Linux distros; on Windows install it from
+[python.org](https://www.python.org/downloads/) or the Microsoft Store.
 
 ```pwsh
 git clone https://github.com/kappern04/idatt2104_2026
@@ -169,7 +177,16 @@ cargo run -p rustcrdt-node -- --port 9002 --ui-port 8002 --peer-id 2 --log-path 
 cargo run -p rustcrdt-node -- --port 9003 --ui-port 8003 --peer-id 3 --log-path operations-3.log --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
 ```
 
-Serve the frontend:
+Serve the frontend — pick one option:
+
+#### Option A — VS Code Live Server (local only, no Python needed)
+
+Open the `frontend/` folder in VS Code, right-click `index.html`, and choose
+**Open with Live Server**. The browser opens automatically on
+`http://127.0.0.1:5500/index.html`. This option only works on the machine
+running VS Code; other devices on the network cannot reach it.
+
+#### Option B — Python (local + LAN / mobile)
 
 ```pwsh
 # Windows
@@ -185,7 +202,10 @@ python3 -m http.server 5173 --bind 0.0.0.0 --directory frontend
 
 On the machine serving the frontend:
 ```text
+# Python
 http://localhost:5173/index.html
+# Live Server   
+http://127.0.0.1:5500/index.html  
 ```
 
 On any other device on the same network, replace `localhost` with the LAN IP
@@ -204,17 +224,17 @@ ip route get 1 | awk '{print $7}'
 http://192.168.1.10:5173/index.html
 ```
 
-You will see a WebSocket field — this is where you tell the browser which node
-to talk to.
+You will see a WebSocket field — enter the address of the node you want to
+connect to.
 
-**Is the node running on the same device as your browser?**
-Use `ws://127.0.0.1` followed by the node's `--ui-port`:
+**Is the node you are connecting to running on this device?**
+Use `ws://127.0.0.1` followed by its `--ui-port`:
 ```text
 ws://127.0.0.1:8001
 ```
 
-**Is the node running on a different device?**
-Use that device's LAN IP followed by the node's `--ui-port`:
+**Is the node running on a different device on the network?**
+Use that device's LAN IP followed by its `--ui-port`:
 ```text
 ws://192.168.1.10:8001
 ```
@@ -247,11 +267,13 @@ This runs:
   for insert idempotency, commutativity, and associativity. All enabled; none
   ignored.
 
-- **Multi-peer integration tests** (`backend/tests/integration_tests.rs`) — 8
+- **Multi-peer integration tests** (`backend/tests/integration_tests.rs`) — 10
   tests covering: three-peer concurrent edits, duplicate op delivery, offline
   peer re-syncing via `Sync`, concurrent delete-vs-insert, network delay
   simulation, a full disconnect-edit-reconnect scenario, insert-after-tombstone
-  anchor stability, and multiple ops per peer converging across three replicas.
+  anchor stability, op-log replay with out-of-order entries, Sync buffering
+  until a missing anchor arrives, and multiple ops per peer converging across
+  three replicas.
 
 ---
 
@@ -271,6 +293,23 @@ This runs:
 
 No CRDT algorithm is taken from an existing library — every implementation in
 `backend/src/crdt/` is written from scratch for this assignment.
+
+---
+
+## External Information / Code Use
+
+No external CRDT libraries or copied CRDT implementations were used. The
+CRDT implementations in `backend/src/crdt/` were written from scratch for this
+assignment.
+
+Conceptual background and inspiration:
+
+- Course assignment text for IDATT2104, spring 2026.
+- Martin Kleppmann, **CRDTs: The Hard Parts**:
+  <https://martin.kleppmann.com/2020/07/06/crdt-hard-parts-hydra.html>
+
+The Rust crate documentation for the dependencies listed above was used as API
+reference only.
 
 ---
 
@@ -318,17 +357,14 @@ cargo doc --workspace --no-deps --open
 - **Offline mode.** A disconnected node already accepts local edits (ops are
   applied immediately and queued in the op-log); on reconnection the Sync
   mechanism delivers all accumulated ops so replicas converge. What is missing
-  is an explicit offline-mode switch, state persistence across clean shutdowns,
-  and better UX (e.g. showing a "disconnected" indicator). There is also a
-  subtle interaction: if peer A quits cleanly (log cleared), restarts, and then
-  receives a Sync from peer B that includes ops peer A originally generated in
-  its previous session, the local ID counter must be advanced past those old
-  values — otherwise new inserts silently produce duplicate IDs and have no
-  visible effect. This is fixed in `peer.rs` (`id_seq` advancement in
-  `remote_op`), but a fuller offline mode would make these semantics explicit.
-- **No frontend tests.** The browser client is exercised manually only.
-- **Large text operations are buggy in the frontend.** Pasting or deleting many
-  characters at once can produce incorrect offsets or cursor jumps.
+  is an explicit offline-mode switch and better UX (e.g. a UI indicator when
+  no peers are connected). There is a subtle interaction worth noting: if a
+  peer receives a `Sync` that includes ops it originally generated in a
+  previous session, its local ID counter must be advanced past those old values
+  — otherwise new inserts silently produce duplicate IDs and have no visible
+  effect. This is handled in `peer.rs` via `id_seq` advancement in `remote_op`.
+- **Better frontend.** The browser client is exercised manually only. Pasting or deleting many
+  characters at once makes weird animation and can offset characters. More functionality to the frontend such as disconnect button.
 
 ---
 
