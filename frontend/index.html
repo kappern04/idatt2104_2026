@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1116" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>RustCRDT — collaborative editor</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>RustCRDT</h1>
+      <div class="status">
+        <label>Node WebSocket:
+          <select id="ws-preset"></select>
+          <input id="ws-url" />
+        </label>
+        <button id="connect">Connect</button>
+        <span id="state" class="state disconnected">disconnected</span>
+      </div>
+    </header>
+
+    <main>
+      <textarea id="editor" placeholder="Connect to a node, then start typing…"
+        spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"
+        data-gramm="false"></textarea>
+      <aside id="log" aria-label="Operation log"></aside>
+    </main>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
+
