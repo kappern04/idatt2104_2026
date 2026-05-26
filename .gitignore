@@ -14,9 +14,7 @@ operations.log
 .claude/
 .config/
 .cargo/
-
-# Local planning docs — not part of the graded submission
-docs/
+.secret/
 target/
 target-review/
 

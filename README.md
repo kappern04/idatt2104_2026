@@ -363,8 +363,10 @@ cargo doc --workspace --no-deps --open
   previous session, its local ID counter must be advanced past those old values
   — otherwise new inserts silently produce duplicate IDs and have no visible
   effect. This is handled in `peer.rs` via `id_seq` advancement in `remote_op`.
-- **Better frontend.** The browser client is exercised manually only. Pasting or deleting many
-  characters at once makes weird animation and can offset characters. More functionality to the frontend such as disconnect button.
+- **Frontend editing limitations.** The browser client is exercised manually
+  only. Large paste/delete operations can produce cursor jumps or incorrect
+  offsets. A disconnect button and stronger frontend tests would be natural
+  improvements.
 
 ---
 
