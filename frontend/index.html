@@ -13,7 +13,10 @@
     <header>
       <h1>RustCRDT</h1>
       <div class="status">
-        <label>Node WebSocket: <input id="ws-url" value="ws://127.0.0.1:8001" /></label>
+        <label>Node WebSocket:
+          <select id="ws-preset"></select>
+          <input id="ws-url" />
+        </label>
         <button id="connect">Connect</button>
         <span id="state" class="state disconnected">disconnected</span>
       </div>

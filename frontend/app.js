@@ -11,13 +11,19 @@ const editor = $("editor");
 const logEl = $("log");
 const stateEl = $("state");
 
-// Auto-fill WS URL from the hostname the page was served from so a phone on
-// the same LAN connects to the right node without manual editing.
+// Populate the preset dropdown. Picking an option fills the text input.
+// Both options are always visible regardless of what's in the input.
 {
-  const host = location.hostname === "127.0.0.1" || location.hostname === "localhost"
-    ? "127.0.0.1"
-    : location.hostname;
-  $("ws-url").value = `ws://${host}:8001`;
+  const preset  = $("ws-preset");
+  const wsUrl   = $("ws-url");
+  const isLocal = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+
+  if (!isLocal) preset.add(new Option(`LAN (${location.hostname})`, `ws://${location.hostname}:8001`));
+  preset.add(new Option("Local (127.0.0.1)", "ws://127.0.0.1:8001"));
+
+  wsUrl.value = preset.value;
+
+  preset.addEventListener("change", () => { wsUrl.value = preset.value; });
 }
 
 let ws = null;
