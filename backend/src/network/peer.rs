@@ -116,8 +116,9 @@ impl Peer {
         *self.log.lock().await = Some(log);
     }
 
-    /// Truncate the op-log to zero bytes on clean shutdown so the next session
-    /// starts fresh. Crashes (no clean shutdown) leave the log intact for replay.
+    /// Truncate the op-log to zero bytes so the next run starts with an empty
+    /// document. Not called automatically — wire to a CLI command or shutdown
+    /// hook if a reset capability is needed.
     pub async fn clear_log(&self) {
         if let Some(log) = self.log.lock().await.as_mut() {
             if let Err(e) = log.clear().await {
@@ -132,18 +133,29 @@ impl Peer {
     /// sessions so that new ops never collide with replayed ids (which would
     /// cause `Rga::apply` to silently discard them as duplicates).
     pub async fn replay_ops(&self, ops: Vec<Op>) {
+        // Scan for the max counter before applying so id_seq is advanced
+        // correctly even for ops that turn out to be unresolvable.
         let mut max_counter = 0u64;
+        for op in &ops {
+            let (op_peer, op_counter) = match op {
+                Op::Insert { ch, .. } => (ch.id.peer_id, ch.id.counter),
+                Op::Delete { target } => (target.peer_id, target.counter),
+            };
+            if op_peer == self.peer_id && op_counter > max_counter {
+                max_counter = op_counter;
+            }
+        }
         {
             let mut state = self.doc_state.lock().await;
-            for op in &ops {
-                state.doc.apply(op);
-                let (op_peer, op_counter) = match op {
-                    Op::Insert { ch, .. } => (ch.id.peer_id, ch.id.counter),
-                    Op::Delete { target } => (target.peer_id, target.counter),
-                };
-                if op_peer == self.peer_id && op_counter > max_counter {
-                    max_counter = op_counter;
-                }
+            // Multi-pass apply handles out-of-order entries in the log (can
+            // happen when concurrent tasks write dependent ops close together).
+            let candidates: OpBatch = ops.into_iter().map(|op| (0, op)).collect();
+            let (_, still_pending) = apply_candidates(&mut state.doc, candidates);
+            if !still_pending.is_empty() {
+                warn!(
+                    "{} op(s) unresolvable during replay — log may be incomplete",
+                    still_pending.len()
+                );
             }
         }
         if max_counter >= self.id_seq.load(Ordering::Relaxed) {
@@ -340,7 +352,20 @@ impl Peer {
                         pending = retry;
                         if pending.is_empty() || pending.len() == before {
                             if !pending.is_empty() {
-                                warn!("{} sync op(s) dropped: anchor not found", pending.len());
+                                // Feed into the pending queue — anchors may
+                                // arrive from another peer after this Sync.
+                                let to_buffer: OpBatch = pending
+                                    .iter()
+                                    .map(|&idx| {
+                                        let pid = match &ops[idx] {
+                                            Op::Insert { ch, .. } => ch.id.peer_id,
+                                            Op::Delete { target } => target.peer_id,
+                                        };
+                                        (pid, ops[idx].clone())
+                                    })
+                                    .collect();
+                                warn!("{} sync op(s) buffered awaiting anchor", to_buffer.len());
+                                state.pending.extend(to_buffer);
                             }
                             break;
                         }

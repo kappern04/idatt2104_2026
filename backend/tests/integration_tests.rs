@@ -306,6 +306,53 @@ async fn peer_disconnects_mid_edit_and_reconverges() {
     );
 }
 
+/// `replay_ops` applies ops in causal order even when the log entries are
+/// out of order — the dependent op listed before its anchor.
+#[tokio::test]
+async fn replay_ops_handles_out_of_order_log() {
+    let p = Peer::new(1);
+
+    let anchor = ins(1, 1, 'a'); // after: None
+    let child = ins_after(1, 1, 1, 2, 'b'); // after: (1, 1)
+
+    // Child comes first — simulates a partially out-of-order log.
+    p.replay_ops(vec![child, anchor]).await;
+
+    assert_eq!(p.text().await, "ab");
+}
+
+/// A `Message::Sync` that contains only a child op (whose anchor is absent)
+/// must buffer it. When the anchor subsequently arrives as a live
+/// `Message::Op`, both ops must be applied and the text must converge.
+#[tokio::test]
+async fn sync_unresolved_op_buffered_until_anchor_arrives() {
+    let p = Peer::new(1);
+
+    let anchor = ins(1, 1, 'a'); // after: None
+    let child = ins_after(1, 1, 1, 2, 'b'); // after: (1, 1)
+
+    // Sync contains only the child — anchor not yet known.
+    p.remote_op(Message::Sync {
+        from: 1,
+        ops: vec![child.clone()],
+    })
+    .await;
+    assert_eq!(
+        p.text().await,
+        "",
+        "child should not apply without its anchor"
+    );
+
+    // Anchor arrives as a live op — child must be drained from pending.
+    p.remote_op(Message::Op {
+        from: 1,
+        seq: 0,
+        op: anchor,
+    })
+    .await;
+    assert_eq!(p.text().await, "ab");
+}
+
 /// Each of three peers applies multiple sequential ops; all are delivered in
 /// scrambled order. The final document must be identical on every replica.
 #[tokio::test]
