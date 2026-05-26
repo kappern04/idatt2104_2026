@@ -1,8 +1,8 @@
 //! Line-oriented stdin CLI.
 //!
 //! Commands:
-//!   insert <text>     — append text to the end of the document
-//!   delete <pos> <n>  — delete n characters starting at visible position pos
+//!   insert `<text>`     — append text to the end of the document
+//!   delete `<pos>` `<n>`  — delete n characters starting at visible position pos
 //!   text              — print the current document text
 //!   peers             — show the number of connected peers
 //!   quit  (or q)      — exit
