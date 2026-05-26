@@ -31,6 +31,13 @@ impl GCounter {
         self.counts.values().sum()
     }
 
+    /// Per-peer slot values, sorted by peer id.
+    pub fn counts(&self) -> Vec<(PeerId, u64)> {
+        let mut v: Vec<(PeerId, u64)> = self.counts.iter().map(|(&p, &c)| (p, c)).collect();
+        v.sort_by_key(|&(p, _)| p);
+        v
+    }
+
     /// Element-wise max merge. Commutative, associative, idempotent.
     pub fn merge(&mut self, other: &GCounter) {
         for (peer, &v) in &other.counts {
