@@ -76,6 +76,12 @@ $("connect").addEventListener("click", () => {
       return;
     }
     if (msg.type === "state") {
+      // Capture cursor BEFORE assigning editor.value — assigning it can move
+      // the cursor, so reading selectionStart afterward gives the post-update
+      // position rather than the user's intended position.
+      const savedStart = editor.selectionStart;
+      const savedEnd   = editor.selectionEnd;
+
       editor.value = msg.text;
       prev = msg.text; // sync diff baseline — prevents stale-offset deletes
 
@@ -88,10 +94,10 @@ $("connect").addEventListener("click", () => {
       } else if (intendedCursor !== null) {
         // Intermediate update — leave cursor wherever the browser put it.
       } else {
-        // Remote update — preserve the user's current cursor position.
-        const saved = Math.min(editor.selectionStart, msg.text.length);
-        editor.selectionStart = saved;
-        editor.selectionEnd = saved;
+        // Remote update — restore the cursor the user had before the update.
+        const clamp = (p) => Math.min(p, msg.text.length);
+        editor.selectionStart = clamp(savedStart);
+        editor.selectionEnd   = clamp(savedEnd);
       }
       log(`state len=${msg.text.length}`);
     } else {
@@ -103,6 +109,11 @@ $("connect").addEventListener("click", () => {
 // Local intent → ops.
 // Naive single-char diff; the Rust node converts (offset, char) into a
 // proper CRDT Op with Ids — the browser never generates Ids itself.
+//
+// Offset caveat: JS string indices are UTF-16 code units; the Rust backend
+// counts Unicode scalar values (chars). They agree for BMP text (U+0000–U+FFFF)
+// but diverge for emoji and other non-BMP characters. This is fine for an
+// ASCII/Latin demo; guard or translate offsets before using non-BMP input.
 let prev = "";
 
 // Capture the exact cursor position on keydown so that deletes of
@@ -110,9 +121,18 @@ let prev = "";
 // CRDT entry instead of the first mismatch found by the string diff.
 let pendingDeleteOffset = null;
 editor.addEventListener("keydown", (e) => {
-  if (e.key === "Backspace") pendingDeleteOffset = editor.selectionStart - 1;
-  else if (e.key === "Delete") pendingDeleteOffset = editor.selectionStart;
-  else pendingDeleteOffset = null;
+  if (e.key === "Backspace") {
+    // Non-collapsed: the browser removes the selected character(s) starting at
+    // selectionStart, so that is the first offset to delete.
+    // Collapsed: Backspace removes the character to the left of the cursor.
+    pendingDeleteOffset = editor.selectionStart < editor.selectionEnd
+      ? editor.selectionStart
+      : editor.selectionStart - 1;
+  } else if (e.key === "Delete") {
+    pendingDeleteOffset = editor.selectionStart;
+  } else {
+    pendingDeleteOffset = null;
+  }
 });
 
 editor.addEventListener("input", () => {

@@ -14,7 +14,7 @@
 ## Preface
 IDATT2104 network programming voluntary project. This project is intended only as a demonstration of CRDT in the course idatt2104.
 
-Developer(s):
+Developer:
 Kasper Østerlie Gladsøy
 
 ---
@@ -122,14 +122,17 @@ traffic and `--connect` to dial another peer on startup:
 
 ```pwsh
 # terminal 1 — first peer, listens on port 9001
-cargo run -p rustcrdt-node -- --port 9001 --peer-id 1
+cargo run -p rustcrdt-node -- --port 9001 --peer-id 1 --log-path operations-1.log
 
 # terminal 2 — second peer, connects to the first
-cargo run -p rustcrdt-node -- --port 9002 --peer-id 2 --connect 127.0.0.1:9001
+cargo run -p rustcrdt-node -- --port 9002 --peer-id 2 --log-path operations-2.log --connect 127.0.0.1:9001
 
 # terminal 3 — third peer, connects to both
-cargo run -p rustcrdt-node -- --port 9003 --peer-id 3 --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
+cargo run -p rustcrdt-node -- --port 9003 --peer-id 3 --log-path operations-3.log --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
 ```
+
+> **Important:** each node must use a distinct `--log-path`. Without it all three
+> processes write to the same `operations.log`, which corrupts replay on restart.
 
 To run peers across multiple machines on the same network, replace
 `127.0.0.1` in `--connect` with the LAN IP of the target machine
@@ -161,9 +164,9 @@ document in real time. It connects to a node over WebSocket using the
 Start the nodes with `--ui-port` added:
 
 ```pwsh
-cargo run -p rustcrdt-node -- --port 9001 --ui-port 8001 --peer-id 1
-cargo run -p rustcrdt-node -- --port 9002 --ui-port 8002 --peer-id 2 --connect 127.0.0.1:9001
-cargo run -p rustcrdt-node -- --port 9003 --ui-port 8003 --peer-id 3 --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
+cargo run -p rustcrdt-node -- --port 9001 --ui-port 8001 --peer-id 1 --log-path operations-1.log
+cargo run -p rustcrdt-node -- --port 9002 --ui-port 8002 --peer-id 2 --log-path operations-2.log --connect 127.0.0.1:9001
+cargo run -p rustcrdt-node -- --port 9003 --ui-port 8003 --peer-id 3 --log-path operations-3.log --connect 127.0.0.1:9001 --connect 127.0.0.1:9002
 ```
 
 Serve the frontend:
@@ -307,10 +310,11 @@ cargo doc --workspace --no-deps --open
 - **PN-Counter not implemented.** A natural extension of the G-Counter; omitted
   because it adds no new theoretical insight beyond the three CRDTs already
   implemented.
-- **Clean shutdown clears the document.** On a normal exit (`quit` or Ctrl-C)
-  the op-log is truncated so the next session starts empty. Only a crash
-  (unclean exit) preserves the log for replay on restart. This is intentional
-  for the demo but a real editor would persist state across clean shutdowns.
+- **Log persists across all shutdowns.** The op-log is never truncated on exit
+  (clean or otherwise), so every restart replays the full history. A real
+  editor would add an explicit "reset" command and separate session state from
+  durable history. `Peer::clear_log()` exists for this purpose but is not wired
+  to any CLI command yet.
 - **Offline mode.** A disconnected node already accepts local edits (ops are
   applied immediately and queued in the op-log); on reconnection the Sync
   mechanism delivers all accumulated ops so replicas converge. What is missing
@@ -323,6 +327,8 @@ cargo doc --workspace --no-deps --open
   visible effect. This is fixed in `peer.rs` (`id_seq` advancement in
   `remote_op`), but a fuller offline mode would make these semantics explicit.
 - **No frontend tests.** The browser client is exercised manually only.
+- **Large text operations are buggy in the frontend.** Pasting or deleting many
+  characters at once can produce incorrect offsets or cursor jumps.
 
 ---
 

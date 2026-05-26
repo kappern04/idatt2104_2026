@@ -72,15 +72,16 @@ impl<T: Eq + Hash + Clone> OrSet<T> {
         }
     }
 
-    /// Remove entries for elements that have no live tags (every add-tag is
-    /// tombstoned). Both the `adds` and `removes` entries are dropped together.
+    /// Remove entries for elements that have no live tags from *this replica's*
+    /// perspective (every locally-known add-tag is tombstoned).
     ///
-    /// This is safe because tags are UUID v4 — globally unique. No other
-    /// replica can hold the same tag IDs, so discarding tombstones for
-    /// fully-dead elements cannot resurrect them after a future merge.
-    /// Tombstone compaction for *partially*-live elements (where only some
-    /// tags are tombstoned) still requires causal stability and is not
-    /// attempted here.
+    /// **Warning — not safe for production use.** Another replica may hold a
+    /// live add-tag for the same element that this replica has not yet received.
+    /// If that tag arrives after compaction the element resurfaces without a
+    /// corresponding tombstone, violating remove-wins semantics. Safe compaction
+    /// requires causal stability (a guarantee that no future `add` ops for this
+    /// element can arrive). Retained here as a demo-only memory management
+    /// helper; do not call during live replication.
     pub fn compact(&mut self) {
         let dead: Vec<T> = self
             .adds
@@ -88,7 +89,7 @@ impl<T: Eq + Hash + Clone> OrSet<T> {
             .filter(|(elem, add_tags)| {
                 self.removes
                     .get(*elem)
-                    .map_or(false, |removed| add_tags.is_subset(removed))
+                    .is_some_and(|removed| add_tags.is_subset(removed))
             })
             .map(|(elem, _)| elem.clone())
             .collect();

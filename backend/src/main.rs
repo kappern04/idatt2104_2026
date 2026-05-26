@@ -54,6 +54,17 @@ async fn main() -> anyhow::Result<()> {
 
     let peer = Peer::new(peer_id);
 
+    // Replay and attach the op-log before networking starts so that the
+    // initial Sync sent on every new connection carries the full history
+    // and no inbound ops are processed before persistence is ready.
+    let prior_ops = OpLog::load(&cli.log_path).await?;
+    if !prior_ops.is_empty() {
+        tracing::info!("replaying {} ops from {}", prior_ops.len(), cli.log_path);
+    }
+    peer.replay_ops(prior_ops).await;
+    let log = OpLog::open(&cli.log_path).await?;
+    peer.set_log(log).await;
+
     // Spawn TCP listener.
     {
         let p = peer.clone();
@@ -70,15 +81,6 @@ async fn main() -> anyhow::Result<()> {
         let p = peer.clone();
         tokio::spawn(async move { p.connect(addr).await });
     }
-
-    // Replay persisted ops before accepting connections.
-    let prior_ops = OpLog::load(&cli.log_path).await?;
-    if !prior_ops.is_empty() {
-        tracing::info!("replaying {} ops from {}", prior_ops.len(), cli.log_path);
-    }
-    peer.replay_ops(prior_ops).await;
-    let log = OpLog::open(&cli.log_path).await?;
-    peer.set_log(log).await;
 
     // Spawn WebSocket UI bridge.
     {
